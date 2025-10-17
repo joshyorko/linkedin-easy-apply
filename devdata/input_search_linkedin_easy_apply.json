@@ -1,0 +1,33 @@
+{
+    "inputs": [
+        {
+            "inputName": "input-1",
+            "inputValue": {
+                "query": "devops engineer",
+                "headless": false,
+                "max_jobs": 25,
+                "remote": true,
+                "hybrid": false,
+                "onsite": false,
+                "skip_ai_enrichment": false
+            }
+        }
+    ],
+    "metadata": {
+        "actionName": "search_linkedin_easy_apply",
+        "actionRelativePath": "src/linkedin/linkedin-actions.py",
+        "schemaDescription": [
+            "query: string: The job search query (title, skills, company, etc.)",
+            "headless: boolean: Whether to run the browser in headless mode (default: True)",
+            "max_jobs: integer: Maximum number of jobs to scrape (default: 25)",
+            "remote: boolean: Include only Remote jobs (can be combined with others)",
+            "hybrid: boolean: Include Hybrid jobs (can be combined)",
+            "onsite: boolean: Include On-site jobs (can be combined)",
+            "skip_ai_enrichment: boolean: Deprecated. AI enrichment now runs via enrich_and_generate_answers()."
+        ],
+        "managedParamsSchemaDescription": {},
+        "inputFileVersion": "v3",
+        "kind": "action",
+        "actionSignature": "action/args: 'query: str, headless: bool=True, max_jobs: int=25, remote: bool=False, hybrid: bool=False, onsite: bool=False, skip_ai_enrichment: bool=False'"
+    }
+}

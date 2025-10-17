@@ -1,0 +1,50 @@
+name: linkedin-easy-apply
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: linkedin-easy-apply-postgres
+    environment:
+      POSTGRES_DB: linkedin_jobs
+      POSTGRES_USER: linkedin_user
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - linkedin-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U linkedin_user -d linkedin_jobs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  action-server:
+    build: .
+    container_name: linkedin-easy-apply-action-server
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Database configuration - choose one:
+      # Option 2: PostgreSQL (use postgres service above)
+      - DATABASE_TYPE=postgres
+      - DATABASE_URL=postgresql://linkedin_user:dev_password@postgres:5432/linkedin_jobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - linkedin-network
+    volumes: []
+
+networks:
+  linkedin-network:
+    driver: bridge
+
+volumes:
+  action-server-data:
+  postgres_data:

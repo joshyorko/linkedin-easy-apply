@@ -1,0 +1,21 @@
+{
+    "inputs": [
+        {
+            "inputName": "input-1",
+            "inputValue": {
+                "limit": 0
+            }
+        }
+    ],
+    "metadata": {
+        "actionName": "get_profile_history_list",
+        "actionRelativePath": "src/linkedin/linkedin-actions.py",
+        "schemaDescription": [
+            "limit: integer: Maximum number of profiles to return (default: 20)"
+        ],
+        "managedParamsSchemaDescription": {},
+        "inputFileVersion": "v3",
+        "kind": "action",
+        "actionSignature": "action/args: 'limit: int=20'"
+    }
+}

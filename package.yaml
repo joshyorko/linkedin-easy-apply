@@ -1,0 +1,77 @@
+spec-version: v2
+
+# Required: A short name for the action package
+name: LinkedIn Easy Apply Server
+
+# Required: A description of what's in the action package.
+description: A set of tools allowing you to easily apply to LinkedIn Easy Apply jobs.
+
+# Package version number, recommend using semver.org
+version: 0.0.1
+
+external-endpoints:
+  - name: "Access to the internet"
+    description: "Accesses the internet to retrieve information."
+    rules:
+      - host: "0.0.0.0"
+        port: 443
+
+
+dependencies:
+  conda-forge:
+    - python=3.12.11
+    - uv=0.8.13
+  pypi:
+    - sema4ai-actions=1.5.0
+    - robocorp-browser=2.3.5
+    - robocorp-log=3.0.1      # Comprehensive logging with HTML reports and sensitive data redaction
+    - python-dotenv=1.1.1
+    - beautifulsoup4=4.14.2
+    - pandas=2.3.3
+    - openai=2.3.0 # OpenAI Python SDK with structured outputs support
+    - pypdf=6.1.1     # PDF text extraction for resume parsing
+    - Pillow=11.3.0  # Image processing for screenshot annotations (optional but recommended)
+    # Database support:
+    # - SQLite is built into Python 3, no additional dependency needed
+    # - PostgreSQL support (optional, install if using DATABASE_TYPE=postgres):
+    - psycopg2-binary=2.9.11  # PostgreSQL adapter for Python
+    
+
+#post-install:
+#  - playwright install chromium
+
+
+#dev-dependencies:
+#  conda-forge:
+#    - pytest=8.3.5
+#    - types-requests=2.32.0.20250301
+#    - ruff=0.11.12
+#    - mypy=1.16.0
+
+#dev-tasks:
+#  test: pytest tests
+#  lint: |
+#    ruff check src tests
+#    ruff format --check src tests
+#  typecheck: mypy --follow-imports=silent --strict src tests
+#  prettify: |
+#    ruff format src tests
+
+packaging:
+  # By default, all files and folders in this directory are packaged when uploaded.
+  # Add exclusion rules below (expects glob format: https://docs.python.org/3/library/glob.html)
+  exclude:
+    - ./.git/**
+    - ./.vscode/**
+    - ./devdata/**
+    - ./output/**
+    - ./venv/**
+    - ./.venv/**
+    - ./.DS_store/**
+    - ./**/*.pyc
+    - ./**/*.zip
+    - ./**/.env
+    - ./**/__MACOSX
+    - ./**/__pycache__
+    - ./**/.git
+    - ./node_modules/**

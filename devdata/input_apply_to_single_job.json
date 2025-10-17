@@ -1,0 +1,25 @@
+{
+    "inputs": [
+        {
+            "inputName": "input-1",
+            "inputValue": {
+                "job_id": "",
+                "headless": false,
+                "allow_submit": false
+            }
+        }
+    ],
+    "metadata": {
+        "actionName": "apply_to_single_job",
+        "actionRelativePath": "src/linkedin/linkedin-actions.py",
+        "schemaDescription": [
+            "job_id: string: LinkedIn job ID to apply to (from database)",
+            "headless: boolean: Run browser in headless mode (default: True)",
+            "allow_submit: boolean: Actually submit application (default: False for safety)"
+        ],
+        "managedParamsSchemaDescription": {},
+        "inputFileVersion": "v3",
+        "kind": "action",
+        "actionSignature": "action/args: 'job_id: str, headless: bool=True, allow_submit: bool=False'"
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "inputs": [
+        {
+            "inputName": "input-1",
+            "inputValue": {
+                "resume_source": "",
+                "is_url": false,
+                "is_chat_file": false
+            }
+        }
+    ],
+    "metadata": {
+        "actionName": "parse_resume_and_save_profile",
+        "actionRelativePath": "src/linkedin/linkedin-actions.py",
+        "schemaDescription": [
+            "resume_source: string: Resume filename (from chat), URL, or local file path",
+            "is_url: boolean: Set True if resume_source is a URL to download from",
+            "is_chat_file: boolean: Set True if resume_source is uploaded to chat (default)"
+        ],
+        "managedParamsSchemaDescription": {},
+        "inputFileVersion": "v3",
+        "kind": "action",
+        "actionSignature": "action/args: 'resume_source: str, is_url: bool=False, is_chat_file: bool=True'"
+    }
+}

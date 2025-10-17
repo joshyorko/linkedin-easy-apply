@@ -1,0 +1,33 @@
+{
+    "inputs": [
+        {
+            "inputName": "input-1",
+            "inputValue": {
+                "run_id": "aaac57b6-234c-4e7e-a336-b239cb591b7e",
+                "job_ids": null,
+                "limit": null,
+                "enrich_jobs": true,
+                "generate_answers": true,
+                "force_reprocess": false,
+                "force_answer_regeneration": false
+            }
+        }
+    ],
+    "metadata": {
+        "actionName": "enrich_and_generate_answers",
+        "actionRelativePath": "src/linkedin/linkedin-actions.py",
+        "schemaDescription": [
+            "run_id: string: Optional search run identifier from search_linkedin_easy_apply()",
+            "job_ids: string: Optional explicit list of job IDs to process",
+            "limit: string: Optional maximum number of jobs to process (applied after filtering)",
+            "enrich_jobs: boolean: Whether to run job-level enrichment (default: True)",
+            "generate_answers: boolean: Whether to generate Easy Apply answers (default: True)",
+            "force_reprocess: boolean: Re-run enrichment even if the job is already processed",
+            "force_answer_regeneration: boolean: Regenerate answers even if they already exist"
+        ],
+        "managedParamsSchemaDescription": {},
+        "inputFileVersion": "v3",
+        "kind": "action",
+        "actionSignature": "action/args: 'run_id: Optional[str]=None, job_ids: Optional[List[str]]=None, limit: Optional[int]=None, enrich_jobs: bool=True, generate_answers: bool=True, force_reprocess: bool=False, force_answer_regeneration: bool=False'"
+    }
+}
