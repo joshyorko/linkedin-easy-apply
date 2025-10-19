@@ -30,6 +30,16 @@ dotenv.load_dotenv()
 # _load_profile is now imported from tools.py
 
 
+def _coerce_float(value: Optional[Any], default: float = 0.0) -> float:
+    """Convert value to float, falling back gracefully."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @action
 def apply_to_single_job(
     job_id: str,
@@ -94,7 +104,7 @@ def apply_to_single_job(
         
         # Check if job is a good fit (if fit analysis was done)
         if job.get('good_fit') is False:
-            fit_score = job.get('fit_score', 0.0)
+            fit_score = _coerce_float(job.get('fit_score'))
             log_warning(
                 "Job marked as bad fit",
                 details=f"{job.get('title')} at {job.get('company')} - Fit score: {fit_score:.2f}",
@@ -147,7 +157,7 @@ def apply_to_single_job(
         
         if enriched and enriched.get('answers'):
             answers = enriched['answers']
-            confidence = enriched.get('confidence_score', 0.0)
+            confidence = _coerce_float(enriched.get('confidence_score'))
             log.info(f"Using enriched answers ({len(answers)} fields, confidence: {confidence:.2f})")
         else:
             log.info("No enriched answers found, will use profile auto-fill")
@@ -311,7 +321,8 @@ def batch_apply_by_run_id(
         for job in easy_apply_jobs:
             # Check good_fit flag if it exists
             if job.get('good_fit') is False:
-                print(f"[Filter] Skipping {job.get('job_id')} - bad fit (score: {job.get('fit_score', 0):.2f})")
+                fit_score = _coerce_float(job.get('fit_score'))
+                print(f"[Filter] Skipping {job.get('job_id')} - bad fit (score: {fit_score:.2f})")
                 continue
             good_fit_jobs.append(job)
         
@@ -360,7 +371,7 @@ def batch_apply_by_run_id(
                     recency_score = 0
             
             # Fit score (0.0-1.0)
-            fit_score = job.get('fit_score', 0.0) or 0.0
+            fit_score = _coerce_float(job.get('fit_score'))
             
             # Combined priority: good_fit (0-1) * 100 + recency (0-1) * 10 + fit_score (0-1)
             # This ensures: good_fits first, then recent jobs, then high fit scores
@@ -425,7 +436,8 @@ def batch_apply_by_run_id(
                     continue
                 
                 answers = enriched['answers']
-                print(f"[ACTION] Using enriched answers (confidence: {enriched.get('confidence_score', 0):.2f})")
+                confidence = _coerce_float(enriched.get('confidence_score'))
+                print(f"[ACTION] Using enriched answers (confidence: {confidence:.2f})")
                 
                 # Apply using core function (single source of truth)
                 apply_result = _apply_to_job_core(
