@@ -104,12 +104,27 @@ def _generate_answers_for_job(
         
         # Generate answers
         print(f"[Helper] Generating answers for job {job_id}")
+        # Build and log the prompt for debugging
+        from ..utils.prompts import build_form_answering_prompt
+        try:
+            prompt_debug = build_form_answering_prompt(
+                json.loads(questions_json) if isinstance(questions_json, str) else questions_json,
+                profile,
+                job
+            )
+        except Exception as e:
+            prompt_debug = f"[Prompt build error]: {e}"
+        print(f"[DEBUG] Form Answering Prompt for job {job_id}:\n{prompt_debug}")
+
         form_answers = generate_answers(
             questions=questions_json,
             profile=profile,
             job=job  # Pass full job dict as context
         )
-        
+
+        # Log raw OpenAI response for debugging
+        print(f"[DEBUG] Raw OpenAI FormAnswers for job {job_id}: {form_answers}")
+
         # Save to enriched_answers table
         if form_answers.answers:
             profile_id = profile.get('profile_id') or str(uuid.uuid4())
@@ -137,6 +152,8 @@ def _generate_answers_for_job(
             return outcome
         else:
             print(f"[Helper] No answers generated for job {job_id}")
+            print(f"[DEBUG] Prompt used for job {job_id}:\n{prompt_debug}")
+            print(f"[DEBUG] Raw OpenAI FormAnswers for job {job_id}: {form_answers}")
             outcome["skipped"] = True
             outcome["reason"] = "empty_response"
             return outcome

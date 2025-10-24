@@ -238,10 +238,13 @@ Salary/Compensation (NUMERIC ONLY):
 - Hourly rate → "50" to "100" (per hour)
 - NEVER use: "Negotiable", "Competitive", "Open", "TBD" - these will fail validation
 
+
 Dropdowns:
+- For location dropdowns, always prefer the most complete, formal location name available (e.g., "Worcester County, Massachusetts, United States") over abbreviations (e.g., "Worcester, MA"). This ensures better matching with LinkedIn's expected formats.
 - Pick the option that best matches user's situation
 - If unsure, pick the middle/most common option
 </answer_strategy>
+
 
 <meta_questions>
 Bot-detection: "How many steps were there?" or "How many questions?"

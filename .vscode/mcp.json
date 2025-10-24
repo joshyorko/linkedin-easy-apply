@@ -1,6 +1,6 @@
 {
 	"servers": {
-		"easy-apply-actions": {
+		"easy_apply_actions": {
 			"url": "http://localhost:8080/mcp",
 			"type": "http"
 		}

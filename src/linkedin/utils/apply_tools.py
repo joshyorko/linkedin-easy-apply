@@ -1,11 +1,11 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 import dotenv
 import os
 from robocorp import browser
 import time
 import re
 
-from .tools import _sel_for_id
+from .tools import _sel_for_id, parse_location
 
 
 
@@ -14,6 +14,112 @@ dotenv.load_dotenv()
 
 LINKEDIN_USERNAME = os.getenv("LINKEDIN_USERNAME")
 LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD")
+
+
+STATE_ABBREV_TO_NAME: Dict[str, str] = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+    "DC": "District of Columbia",
+}
+
+STATE_NAME_TO_ABBREV: Dict[str, str] = {v.lower(): k for k, v in STATE_ABBREV_TO_NAME.items()}
+
+LOCATION_PENALTY_KEYWORDS = (
+    "county",
+    "historic",
+    "district",
+    "metropolitan",
+    "metro area",
+    "region",
+    "borough",
+)
+
+
+def _desired_location_strings(context: Dict[str, Optional[str]]) -> List[str]:
+    """Return preferred renderings for the user's location."""
+    city = (context.get("city") or "").strip()
+    state_full = (context.get("state_full") or "").strip()
+    state_abbrev = (context.get("state_abbrev") or "").strip()
+    country = (context.get("country") or "").strip()
+
+    strings: List[str] = []
+    if city and state_abbrev:
+        strings.append(f"{city}, {state_abbrev}")
+    if city and state_full:
+        strings.append(f"{city}, {state_full}")
+    if city and state_full and country:
+        strings.append(f"{city}, {state_full}, {country}")
+    if city and state_abbrev and country:
+        strings.append(f"{city}, {state_abbrev}, {country}")
+    if city and country and country.lower() == "united states":
+        strings.append(f"{city}, {state_full}, United States")
+        strings.append(f"{city}, {state_abbrev}, United States")
+    if city and not strings:
+        strings.append(city)
+    if state_full and not city:
+        strings.append(state_full)
+    if state_abbrev and not city:
+        strings.append(state_abbrev)
+    deduped: List[str] = []
+    seen: Set[str] = set()
+    for s in strings:
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+        key = s_clean.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(s_clean)
+    return deduped
 
 def _ensure_logged_in(page) -> None:
     """Best-effort login using environment credentials and persistent context."""
@@ -50,6 +156,335 @@ def configure_browser(headless_mode: bool = False):
 
     )
 
+
+def _looks_like_location_field(label: str, field_id: str, extra: Optional[str] = None) -> bool:
+    """Heuristic to detect location inputs while avoiding relocation questions."""
+    parts = [label or "", field_id or "", extra or ""]
+    text = " ".join(parts).strip().lower()
+    if not text:
+        return False
+    if "relocation" in text:
+        return False
+    return (" location" in f" {text}" or " city" in f" {text}")
+
+
+def _prepare_location_context(target_text: str, profile: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """Build normalized city/state/country context from provided text and profile fallbacks."""
+    profile = profile or {}
+    info = parse_location(target_text)
+
+    profile_location = profile.get("location") or ""
+    if profile_location and (not info.get("city") or not info.get("state") or not info.get("country")):
+        fallback = parse_location(profile_location)
+        for key in ("city", "state", "country"):
+            if not info.get(key) and fallback.get(key):
+                info[key] = fallback.get(key)
+
+    if not info.get("city") and profile.get("address_city"):
+        info["city"] = profile.get("address_city")
+    if not info.get("state") and profile.get("address_state"):
+        info["state"] = profile.get("address_state")
+    if not info.get("country") and profile.get("address_country"):
+        info["country"] = profile.get("address_country")
+
+    state_raw = (info.get("state") or "").strip()
+    state_abbrev: Optional[str] = None
+    state_full: Optional[str] = None
+    if state_raw:
+        if len(state_raw) == 2 and state_raw.upper() in STATE_ABBREV_TO_NAME:
+            state_abbrev = state_raw.upper()
+            state_full = STATE_ABBREV_TO_NAME[state_abbrev]
+        else:
+            state_full = state_raw.title()
+            state_abbrev = STATE_NAME_TO_ABBREV.get(state_raw.lower())
+            if not state_full:
+                state_full = state_raw
+
+    country = (info.get("country") or "").strip()
+    if not country and state_abbrev in STATE_ABBREV_TO_NAME:
+        country = "United States"
+
+    return {
+        "raw": target_text,
+        "city": (info.get("city") or "").strip(),
+        "state_abbrev": state_abbrev,
+        "state_full": state_full,
+        "country": country,
+    }
+
+
+def _collect_typeahead_options(page, dlg, max_options: int = 20) -> List[Dict[str, Any]]:
+    """Collect visible options for the currently open typeahead dropdown."""
+    selectors = [
+        '[role="listbox"] [role="option"]',
+        '[role="option"]',
+        '.artdeco-typeahead__dropdown [role="option"]',
+        '.artdeco-typeahead__dropdown li',
+        '.typeahead-dropdown__item',
+    ]
+    options: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+
+    for sel in selectors:
+        for scope in (dlg, page):
+            try:
+                loc = scope.locator(sel)
+            except Exception:
+                continue
+            try:
+                count = min(loc.count(), max_options)
+            except Exception:
+                continue
+            for idx in range(count):
+                try:
+                    opt = loc.nth(idx)
+                    text = (opt.inner_text() or '').strip()
+                    key = text.lower()
+                    if not text or key in seen:
+                        continue
+                    options.append({"locator": opt, "text": text})
+                    seen.add(key)
+                    if len(options) >= max_options:
+                        return options
+                except Exception:
+                    continue
+    return options
+
+
+def _score_location_option(text: str, context: Dict[str, Optional[str]]) -> int:
+    """Score an option text against the desired city/state/country."""
+    text_lower = text.lower()
+    score = 0
+    city = (context.get("city") or "").lower()
+    state_full = (context.get("state_full") or "").lower()
+    state_abbrev = (context.get("state_abbrev") or "").lower()
+    country = (context.get("country") or "").lower()
+
+    desired_strings = [s.lower() for s in _desired_location_strings(context)]
+
+    if desired_strings:
+        for desired in desired_strings:
+            if text_lower == desired:
+                score += 12
+                break
+            if text_lower.startswith(desired):
+                score += 7
+                break
+
+    if city and city in text_lower:
+        score += 3
+    if state_full and state_full in text_lower:
+        score += 3
+    if state_abbrev and state_abbrev in text_lower:
+        score += 2
+    if country and country in text_lower:
+        score += 1
+
+    for penalty in LOCATION_PENALTY_KEYWORDS:
+        if penalty in text_lower:
+            score -= 6
+            break
+    return score
+
+
+def _location_value_matches(context: Dict[str, Optional[str]], value: Optional[str]) -> bool:
+    """Return True when the rendered input value looks like the desired location."""
+    val = (value or "").strip().lower()
+    if not val:
+        return False
+
+    desired_strings = [s.lower() for s in _desired_location_strings(context)]
+    if desired_strings and val in desired_strings:
+        return True
+
+    # Reject obvious false positives containing penalty keywords unless we have no other info
+    for penalty in LOCATION_PENALTY_KEYWORDS:
+        if penalty in val:
+            return False
+
+    city = (context.get("city") or "").strip().lower()
+    state_full = (context.get("state_full") or "").strip().lower()
+    state_abbrev = (context.get("state_abbrev") or "").strip().lower()
+
+    if city and city not in val:
+        return False
+
+    if state_full:
+        if state_full not in val:
+            if state_abbrev and state_abbrev not in val:
+                return False
+    elif state_abbrev:
+        if state_abbrev not in val:
+            return False
+
+    country = (context.get("country") or "").strip().lower()
+    if country and country not in val:
+        # Country mismatch is informative but not fatal for US-localized inputs.
+        # Allow if the value already includes city/state.
+        if city and ((state_full and state_full in val) or (state_abbrev and state_abbrev in val)):
+            return True
+        return False
+
+    return True
+
+
+def _fill_location_typeahead(page, dlg, element, target_text: str, profile: Dict[str, Any]) -> bool:
+    """Fill a location field and select the best matching suggestion from the dropdown."""
+    target_text = (target_text or '').strip()
+    if not target_text:
+        return False
+
+    context = _prepare_location_context(target_text, profile)
+
+    input_candidates: List[str] = []
+    city = context.get("city")
+    state_abbrev = context.get("state_abbrev")
+    state_full = context.get("state_full")
+
+    if city and state_abbrev:
+        input_candidates.append(f"{city}, {state_abbrev}")
+    if city and state_full:
+        formatted = f"{city}, {state_full}"
+        if formatted not in input_candidates:
+            input_candidates.append(formatted)
+    if city and not input_candidates:
+        input_candidates.append(city)
+    if state_full and not input_candidates:
+        input_candidates.append(state_full)
+    if target_text not in input_candidates:
+        input_candidates.append(target_text)
+
+    for candidate in input_candidates:
+        try:
+            element.click(timeout=2000)
+        except Exception:
+            pass
+        try:
+            element.fill('')
+            time.sleep(0.1)
+        except Exception:
+            try:
+                element.press('Control+A')
+                element.press('Delete')
+            except Exception:
+                pass
+        try:
+            if len(candidate) <= 24:
+                element.type(candidate, delay=40)
+            else:
+                element.type(candidate)
+        except Exception:
+            try:
+                element.fill(candidate)
+            except Exception:
+                continue
+
+        time.sleep(0.3)
+        options: List[Dict[str, Any]] = []
+        for attempt in range(5):
+            options = _collect_typeahead_options(page, dlg)
+            if options:
+                break
+            time.sleep(0.2)
+
+        if not options:
+            continue
+
+        desired_strings = [s.lower() for s in _desired_location_strings(context)]
+        best_option = None
+        best_score = -999
+        desired_combo = None
+        if city and state_full:
+            desired_combo = f"{city}, {state_full}".lower()
+
+        # First, look for perfect match with desired strings.
+        for opt in options:
+            text_lower = opt["text"].strip().lower()
+            if text_lower in desired_strings:
+                best_option = opt
+                best_score = 999
+                break
+
+        if not best_option:
+            for opt in options:
+                text = opt["text"]
+                score = _score_location_option(text, context)
+                if desired_combo and text.lower().startswith(desired_combo):
+                    score += 2
+                if score > best_score or (score == best_score and best_option and len(text) < len(best_option["text"])):
+                    best_score = score
+                    best_option = opt
+
+        if not best_option:
+            best_option = options[0]
+
+        try:
+            print(f"[Location] Selecting '{best_option['text']}' for location field")
+            best_option["locator"].click(timeout=2000, force=False)
+            time.sleep(0.2)
+            try:
+                element.evaluate("el => el.blur()")
+            except Exception:
+                pass
+            # Confirm the input now reflects the desired city/state; retry otherwise.
+            matched = False
+            for _ in range(8):
+                try:
+                    current_value = element.input_value()
+                except Exception:
+                    try:
+                        current_value = element.evaluate("el => el.value")
+                    except Exception:
+                        current_value = ""
+                if _location_value_matches(context, current_value):
+                    matched = True
+                    break
+                time.sleep(0.2)
+            if matched:
+                print(f"[Location] ✓ Confirmed location value '{current_value}'")
+                try:
+                    element.press('Enter')
+                except Exception:
+                    pass
+                return True
+            print(f"[Location] ⚠️ Value mismatch after selecting option: '{current_value}'")
+            # Keep searching with next candidate (retype value).
+            continue
+        except Exception:
+            continue
+
+    try:
+        element.press('Enter')
+        time.sleep(0.1)
+        try:
+            final_value = element.input_value()
+        except Exception:
+            try:
+                final_value = element.evaluate("el => el.value")
+            except Exception:
+                final_value = ""
+        if _location_value_matches(context, final_value):
+            print(f"[Location] ✓ Confirmed value via Enter fallback: '{final_value}'")
+            return True
+        # Last resort: force fill with preferred string if available.
+        desired_strings = _desired_location_strings(context)
+        if desired_strings:
+            preferred = desired_strings[0]
+            try:
+                element.fill(preferred)
+                time.sleep(0.1)
+                element.press('Enter')
+                time.sleep(0.1)
+                final_value = element.input_value()
+                if _location_value_matches(context, final_value):
+                    print(f"[Location] ✓ Forced value to '{final_value}'")
+                    return True
+            except Exception:
+                pass
+        print(f"[Location] ⚠️ Fallback Enter produced mismatched value '{final_value}'")
+        return False
+    except Exception:
+        return False
 
 
 def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[str, Any]) -> Dict[str, Any]:
@@ -136,6 +571,8 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                 category = field.get("category")
                 selector = field.get("selector")
                 required = bool(field.get("required"))
+                field_id_value = field.get("id") or fid
+                location_field = _looks_like_location_field(label, field_id_value, field.get("type") or "")
 
                 el = None
                 if selector:
@@ -148,7 +585,7 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                     continue
 
                 lower = label.lower()
-                print(f"[Fill] Field '{label or fid}' ({category}), required={required}")
+                print(f"[Fill] Field '{label or field_id_value}' ({category}), required={required}")
 
                 # Resolve provided answer for this field, by id/name/label, with fuzzy fallback
                 provided = None
@@ -179,14 +616,14 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                             break
 
                 if provided is None:
-                    print(f"[Fill] No provided answer found for '{label or fid}'")
+                    print(f"[Fill] No provided answer found for '{label or field_id_value}'")
                 else:
-                    print(f"[Fill] Using answer '{provided}' for '{label or fid}'")
+                    print(f"[Fill] Using answer '{provided}' for '{label or field_id_value}'")
 
                 # Check if field is already filled (LinkedIn pre-fills from profile)
                 is_prefilled, current_value = is_field_prefilled(el, category)
                 if is_prefilled:
-                    print(f"[Fill] ⏭️  Field '{label or fid}' already has value: '{current_value}' - SKIPPING")
+                    print(f"[Fill] ⏭️  Field '{label or field_id_value}' already has value: '{current_value}' - SKIPPING")
                     summary["skipped_prefilled"] += 1
                     # Only skip if we don't have a better answer, or if it's a critical field
                     # For now, skip ALL prefilled fields to avoid overwriting LinkedIn data
@@ -195,12 +632,19 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                 # Apply provided answers first
                 if provided is not None:
                     try:
-                        if category == "text_input" or category == "text_area":
+                        if category == "text_input":
+                            if location_field and _fill_location_typeahead(page, dlg, el, str(provided), profile):
+                                summary["filled"] += 1
+                                continue
+                            el.fill(str(provided))
+                            summary["filled"] += 1
+                            continue
+                        if category == "text_area":
                             el.fill(str(provided))
                             summary["filled"] += 1
                             continue
                         if category == "dropdown":
-                            print(f"[Dropdown] Target value '{provided}' for field '{label or fid}'")
+                            print(f"[Dropdown] Target value '{provided}' for field '{label or field_id_value}'")
                             # LinkedIn uses CUSTOM dropdowns (div/button combos), not native <select>
                             # Strategy 1: Try native select first (legacy forms)
                             try:
@@ -456,6 +900,37 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                             pass
 
                 elif category == "text_input":
+                    if location_field:
+                        location_candidates: List[str] = []
+                        if profile.get("location"):
+                            location_candidates.append(profile.get("location"))
+                        city = profile.get("address_city")
+                        state = profile.get("address_state")
+                        country = profile.get("address_country")
+                        if city and state:
+                            location_candidates.append(f"{city}, {state}")
+                        if city and country and not state:
+                            location_candidates.append(f"{city}, {country}")
+                        if city:
+                            location_candidates.append(city)
+                        if state:
+                            location_candidates.append(state)
+                        filled_location = False
+                        seen_candidates: Set[str] = set()
+                        for candidate in location_candidates:
+                            candidate_clean = (candidate or "").strip()
+                            if not candidate_clean:
+                                continue
+                            key = candidate_clean.lower()
+                            if key in seen_candidates:
+                                continue
+                            seen_candidates.add(key)
+                            if _fill_location_typeahead(page, dlg, el, candidate_clean, profile):
+                                summary["filled"] += 1
+                                filled_location = True
+                                break
+                        if filled_location:
+                            continue
                     if any(k in lower for k in ["phone"]) and profile.get("phone"):
                         try:
                             el.fill(str(profile["phone"]))
