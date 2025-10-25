@@ -1,0 +1,28 @@
+{
+  "name": "linkedin-easy-apply-retro-ui",
+  "version": "1.0.0",
+  "description": "Retro 80s terminal-style UI for LinkedIn Easy Apply Action Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "linkedin",
+    "automation",
+    "retro",
+    "terminal"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "sqlite3": "^5.1.6",
+    "pg": "^8.11.3",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

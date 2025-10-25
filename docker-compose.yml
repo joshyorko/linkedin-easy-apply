@@ -41,6 +41,37 @@ services:
       - linkedin-network
     volumes: []
 
+  retro-ui:
+    build: ./retro-ui
+    container_name: linkedin-easy-apply-retro-ui
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      # Point to action server container
+      - ACTION_SERVER_URL=http://action-server:8080
+      # Database path (if using SQLite via volume mount)
+      - DB_PATH=/data/linkedin_jobs.sqlite
+      # For PostgreSQL (alternative)
+      - DATABASE_TYPE=postgres
+      - DATABASE_URL=postgresql://linkedin_user:dev_password@postgres:5432/linkedin_jobs
+    depends_on:
+      - action-server
+      - postgres
+    restart: unless-stopped
+    networks:
+      - linkedin-network
+    volumes:
+      # Mount SQLite database if using DATABASE_TYPE=sqlite
+      - ./src:/data:ro
+      # Optional: Mount output logs for viewing
+      - ./output:/app/output:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); });"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 networks:
   linkedin-network:
     driver: bridge

@@ -3,7 +3,7 @@ import dotenv
 import os
 import uuid
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 from ..utils.db import (
@@ -166,9 +166,9 @@ def _generate_answers_for_job(
 
 @action
 def enrich_and_generate_answers(
-    run_id: Optional[str] = None,
-    job_ids: Optional[List[str]] = None,
-    limit: Optional[int] = None,
+    run_id: Union[str, None] = None,
+    job_ids: Union[str, List[str], None] = None,
+    limit: Union[str, int, None] = None,
     enrich_jobs: bool = True,
     generate_answers: bool = True,
     force_reprocess: bool = False,
@@ -189,6 +189,16 @@ def enrich_and_generate_answers(
     Returns:
         Response summarizing enrichment and answer generation results.
     """
+    # Sanitize empty strings to None (common issue with UI form inputs)
+    if isinstance(run_id, str) and run_id == "":
+        run_id = None
+    if isinstance(job_ids, str) and job_ids == "":
+        job_ids = None
+    elif isinstance(job_ids, list) and len(job_ids) == 0:
+        job_ids = None
+    if isinstance(limit, str):
+        limit = int(limit) if limit != "" else None
+    
     if not OPENAI_API_KEY:
         raise ActionError("OPENAI_API_KEY is required for enrichment and answer generation.")
     
@@ -477,8 +487,8 @@ def generate_answers_for_run(run_id: str) -> Response:
 
 @action
 def reenrich_jobs(
-    job_ids: Optional[List[str]] = None,
-    run_id: Optional[str] = None,
+    job_ids: Union[str, List[str], None] = None,
+    run_id: Union[str, None] = None,
     force_regenerate: bool = True
 ) -> Response:
     """
@@ -492,6 +502,14 @@ def reenrich_jobs(
     Returns:
         Response with re-enrichment results
     """
+    # Sanitize empty strings to None
+    if isinstance(run_id, str) and run_id == "":
+        run_id = None
+    if isinstance(job_ids, str) and job_ids == "":
+        job_ids = None
+    elif isinstance(job_ids, list) and len(job_ids) == 0:
+        job_ids = None
+    
     try:
         if not job_ids and not run_id:
             return Response(result={
@@ -602,7 +620,7 @@ def check_which_jobs_ready() -> Response:
 
 
 @action
-def get_job_fit_analysis(run_id: Optional[str] = None) -> Response:
+def get_job_fit_analysis(run_id: Union[str, None] = None) -> Response:
     """
     Get job-to-profile fit analysis results. Returns statistics on how jobs match your profile, including good fits (ready to apply) and bad fits (filtered out).
     
@@ -613,6 +631,10 @@ def get_job_fit_analysis(run_id: Optional[str] = None) -> Response:
     Returns:
         Response with fit analysis statistics and job lists
     """
+    # Sanitize empty string to None
+    if isinstance(run_id, str) and run_id == "":
+        run_id = None
+    
     try:
         from ..utils.db import get_fit_summary, get_good_fit_jobs, get_bad_fit_jobs
         

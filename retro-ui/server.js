@@ -1,0 +1,355 @@
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fetch = require('node-fetch');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+const ACTION_SERVER_URL = process.env.ACTION_SERVER_URL || 'http://localhost:8082';
+const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
+
+// Database setup based on type
+let db;
+let dbType = DATABASE_TYPE;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(__dirname));
+
+// Database connection
+function initDatabase() {
+    if (dbType === 'postgres') {
+        // PostgreSQL setup
+        const { Client } = require('pg');
+        const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://linkedin_user:dev_password@postgres:5432/linkedin_jobs';
+        
+        db = new Client({ connectionString: DATABASE_URL });
+        db.connect()
+            .then(() => {
+                console.log('✅ PostgreSQL database connected successfully');
+                console.log('📂 Database URL:', DATABASE_URL.replace(/:[^:@]+@/, ':****@')); // Hide password
+            })
+            .catch(err => {
+                console.error('❌ Error connecting to PostgreSQL:', err.message);
+                console.log('Falling back to SQLite...');
+                dbType = 'sqlite';
+                initSQLite();
+            });
+    } else {
+        initSQLite();
+    }
+}
+
+function initSQLite() {
+    const sqlite3 = require('sqlite3').verbose();
+    const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'src', 'linkedin_jobs.sqlite');
+    
+    db = new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY, (err) => {
+        if (err) {
+            console.error('❌ Error opening database:', err.message);
+            console.log('Looking for database at:', DB_PATH);
+            // Try alternate path
+            const alternatePath = path.join(__dirname, '..', 'linkedin_jobs.sqlite');
+            db = new sqlite3.Database(alternatePath, sqlite3.OPEN_READONLY, (err2) => {
+                if (err2) {
+                    console.error('❌ Error opening alternate database:', err2.message);
+                    process.exit(1);
+                }
+                console.log('✅ SQLite database connected (alternate path)');
+            });
+        } else {
+            console.log('✅ SQLite database connected successfully');
+            console.log('📂 Database path:', DB_PATH);
+        }
+    });
+}
+
+// Helper function to execute queries based on database type
+async function executeQuery(query, params = []) {
+    return new Promise((resolve, reject) => {
+        if (dbType === 'postgres') {
+            db.query(query, params)
+                .then(result => resolve(result.rows))
+                .catch(err => reject(err));
+        } else {
+            // SQLite
+            db.all(query, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        }
+    });
+}
+
+// API Routes
+
+// Query database (safe, read-only)
+app.post('/api/query', async (req, res) => {
+    const { query } = req.body;
+    
+    if (!query) {
+        return res.status(400).json({ error: 'Query is required' });
+    }
+    
+    // Security: Only allow SELECT queries
+    if (!query.trim().toLowerCase().startsWith('select')) {
+        return res.status(403).json({ error: 'Only SELECT queries are allowed' });
+    }
+    
+    console.log('📊 Executing query:', query);
+    
+    try {
+        const rows = await executeQuery(query, []);
+        res.json({
+            success: true,
+            results: rows,
+            count: rows.length
+        });
+    } catch (err) {
+        console.error('❌ Query error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get database stats
+app.get('/api/stats', async (req, res) => {
+    try {
+        const stats = {};
+        
+        const totalResult = await executeQuery('SELECT COUNT(*) as count FROM job_postings');
+        stats.totalJobs = totalResult[0].count;
+        
+        const goodFitResult = await executeQuery('SELECT COUNT(*) as count FROM job_postings WHERE good_fit = true OR good_fit = 1');
+        stats.goodFitJobs = goodFitResult[0].count;
+        
+        const appliedResult = await executeQuery('SELECT COUNT(*) as count FROM job_postings WHERE is_applied = true OR is_applied = 1');
+        stats.appliedJobs = appliedResult[0].count;
+        
+        const profileResult = await executeQuery('SELECT profile_name FROM user_profiles WHERE is_active = true OR is_active = 1');
+        stats.activeProfile = profileResult.length > 0 ? profileResult[0].profile_name : 'NONE';
+        
+        res.json(stats);
+    } catch (err) {
+        console.error('❌ Stats error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get recent searches
+app.get('/api/recent-searches', async (req, res) => {
+    const query = `
+        SELECT DISTINCT run_id, 
+               COUNT(*) as job_count, 
+               MAX(scraped_at) as last_scraped 
+        FROM job_postings 
+        WHERE run_id LIKE 'search_%' 
+        GROUP BY run_id 
+        ORDER BY last_scraped DESC 
+        LIMIT 10
+    `;
+    
+    try {
+        const rows = await executeQuery(query);
+        res.json(rows);
+    } catch (err) {
+        console.error('❌ Recent searches error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get jobs by run_id
+app.get('/api/jobs/:runId', async (req, res) => {
+    const { runId } = req.params;
+    
+    const query = `
+        SELECT job_id, title, company, location_raw, location_type, 
+               good_fit, is_applied, fit_score, job_url, 
+               ai_confidence_score, experience_level
+        FROM job_postings 
+        WHERE run_id = $1 
+        ORDER BY fit_score DESC
+    `;
+    
+    try {
+        const rows = await executeQuery(dbType === 'postgres' ? query : query.replace('$1', '?'), [runId]);
+        res.json(rows);
+    } catch (err) {
+        console.error('❌ Jobs by run_id error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get single job details
+app.get('/api/job/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+    
+    const query = dbType === 'postgres' 
+        ? 'SELECT * FROM job_postings WHERE job_id = $1'
+        : 'SELECT * FROM job_postings WHERE job_id = ?';
+    
+    try {
+        const rows = await executeQuery(query, [jobId]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        res.json(rows[0]);
+    } catch (err) {
+        console.error('❌ Job details error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get good fit jobs
+app.get('/api/good-fit-jobs', async (req, res) => {
+    const limit = req.query.limit || 50;
+    
+    const query = `
+        SELECT job_id, title, company, location_raw, location_type,
+               good_fit, is_applied, fit_score, job_url,
+               ai_confidence_score, experience_level
+        FROM job_postings 
+        WHERE good_fit = ${dbType === 'postgres' ? 'true' : '1'} 
+        ORDER BY fit_score DESC 
+        LIMIT ${dbType === 'postgres' ? '$1' : '?'}
+    `;
+    
+    try {
+        const rows = await executeQuery(query, [limit]);
+        res.json(rows);
+    } catch (err) {
+        console.error('❌ Good fit jobs error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get application history
+app.get('/api/application-history', async (req, res) => {
+    const limit = req.query.limit || 50;
+    
+    const query = `
+        SELECT job_id, title, company, location_raw, job_url, updated_at
+        FROM job_postings 
+        WHERE is_applied = ${dbType === 'postgres' ? 'true' : '1'} 
+        ORDER BY updated_at DESC 
+        LIMIT ${dbType === 'postgres' ? '$1' : '?'}
+    `;
+    
+    try {
+        const rows = await executeQuery(query, [limit]);
+        res.json(rows);
+    } catch (err) {
+        console.error('❌ Application history error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get active profile
+app.get('/api/profile', async (req, res) => {
+    const query = dbType === 'postgres'
+        ? 'SELECT * FROM user_profiles WHERE is_active = true'
+        : 'SELECT * FROM user_profiles WHERE is_active = 1';
+    
+    try {
+        const rows = await executeQuery(query);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'No active profile found' });
+        }
+        res.json(rows[0]);
+    } catch (err) {
+        console.error('❌ Profile error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Proxy to action server (forward POST requests)
+app.post('/api/action-server/*', async (req, res) => {
+    const actionPath = req.params[0];
+    const actionServerUrl = `${ACTION_SERVER_URL}/${actionPath}`;
+    
+    console.log('🔄 Proxying to action server:', actionServerUrl);
+    
+    try {
+        const response = await fetch(actionServerUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(req.body)
+        });
+        
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (error) {
+        console.error('❌ Proxy error:', error.message);
+        res.status(500).json({ error: 'Failed to connect to action server' });
+    }
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'OK',
+        database: db ? 'connected' : 'disconnected',
+        databaseType: dbType,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+    console.error('❌ Server error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+initDatabase();
+
+app.listen(PORT, () => {
+    console.log('');
+    console.log('╔══════════════════════════════════════════════════════╗');
+    console.log('║  LINKEDIN EASY APPLY - RETRO UI BACKEND SERVER      ║');
+    console.log('╚══════════════════════════════════════════════════════╝');
+    console.log('');
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`�️  Database Type: ${dbType.toUpperCase()}`);
+    console.log(`🔗 Action Server: ${ACTION_SERVER_URL}`);
+    console.log('');
+    console.log('📖 Available Endpoints:');
+    console.log('   POST /api/query - Execute SQL queries');
+    console.log('   GET  /api/stats - Get database statistics');
+    console.log('   GET  /api/recent-searches - Recent search runs');
+    console.log('   GET  /api/jobs/:runId - Jobs by run ID');
+    console.log('   GET  /api/job/:jobId - Single job details');
+    console.log('   GET  /api/good-fit-jobs - All good fit jobs');
+    console.log('   GET  /api/application-history - Application history');
+    console.log('   GET  /api/profile - Active user profile');
+    console.log('   GET  /api/health - Health check');
+    console.log('');
+    console.log(`🌐 Open UI at: http://localhost:${PORT}/index.html`);
+    console.log('');
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down server...');
+    
+    if (dbType === 'postgres' && db) {
+        try {
+            await db.end();
+            console.log('✅ PostgreSQL connection closed');
+        } catch (err) {
+            console.error('❌ Error closing PostgreSQL:', err.message);
+        }
+    } else if (dbType === 'sqlite' && db) {
+        db.close((err) => {
+            if (err) {
+                console.error('❌ Error closing SQLite:', err.message);
+            } else {
+                console.log('✅ SQLite connection closed');
+            }
+        });
+    }
+    
+    process.exit(0);
+});

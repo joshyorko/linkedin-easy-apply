@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINKEDIN.EXE - Easy Apply Terminal v2.0</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="crt-overlay"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="ascii-art">
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ██╗     ██╗███╗   ██╗██╗  ██╗███████╗██████╗ ██╗███╗   ██╗   ███████╗██╗  ██╗███████╗ ║
+║  ██║     ██║████╗  ██║██║ ██╔╝██╔════╝██╔══██╗██║████╗  ██║   ██╔════╝╚██╗██╔╝██╔════╝ ║
+║  ██║     ██║██╔██╗ ██║█████╔╝ █████╗  ██║  ██║██║██╔██╗ ██║   █████╗   ╚███╔╝ █████╗   ║
+║  ██║     ██║██║╚██╗██║██╔═██╗ ██╔══╝  ██║  ██║██║██║╚██╗██║   ██╔══╝   ██╔██╗ ██╔══╝   ║
+║  ███████╗██║██║ ╚████║██║  ██╗███████╗██████╔╝██║██║ ╚████║██╗███████╗██╔╝ ██╗███████╗ ║
+║  ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝╚═╝  ╚═══╝╚═╝╚══════╝╚═╝  ╚═╝╚══════╝ ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+            </div>
+            <div class="system-info">
+                LINKEDIN EASY APPLY ACTION SERVER v2.0 | TERMINAL MODE | <span id="timestamp"></span>
+            </div>
+        </div>
+
+        <!-- Main Terminal Area -->
+        <div class="terminal-wrapper">
+            <!-- Left Panel - Console Output -->
+            <div class="terminal-panel console-panel">
+                <div class="panel-header">
+                    <span class="panel-title">▶ CONSOLE OUTPUT</span>
+                    <button class="btn-clear" onclick="clearConsole()">CLEAR</button>
+                </div>
+                <div class="console-output" id="console-output">
+                    <div class="boot-sequence">
+                        <div class="boot-line">SYSTEM BOOT INITIATED...</div>
+                        <div class="boot-line">LOADING ACTION SERVER MODULE... OK</div>
+                        <div class="boot-line">CONNECTING TO SQLITE DATABASE... OK</div>
+                        <div class="boot-line">INITIALIZING BROWSER CONTEXT... OK</div>
+                        <div class="boot-line">CHECKING LINKEDIN SESSION... OK</div>
+                        <div class="boot-line success">█ READY FOR OPERATIONS █</div>
+                        <div class="boot-line">Type commands or use menu buttons...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Status & Data -->
+            <div class="terminal-panel status-panel">
+                <div class="panel-header">
+                    <span class="panel-title">▶ SYSTEM STATUS</span>
+                </div>
+                <div class="status-content" id="status-content">
+                    <div class="stat-group">
+                        <div class="stat-label">DATABASE</div>
+                        <div class="stat-value" id="db-status">CONNECTED</div>
+                    </div>
+                    <div class="stat-group">
+                        <div class="stat-label">ACTION SERVER</div>
+                        <div class="stat-value" id="server-status">CHECKING...</div>
+                    </div>
+                    <div class="stat-group">
+                        <div class="stat-label">TOTAL JOBS</div>
+                        <div class="stat-value" id="total-jobs">0</div>
+                    </div>
+                    <div class="stat-group">
+                        <div class="stat-label">GOOD FIT</div>
+                        <div class="stat-value" id="good-fit-jobs">0</div>
+                    </div>
+                    <div class="stat-group">
+                        <div class="stat-label">APPLIED</div>
+                        <div class="stat-value" id="applied-jobs">0</div>
+                    </div>
+                    <div class="stat-group">
+                        <div class="stat-label">ACTIVE PROFILE</div>
+                        <div class="stat-value" id="active-profile">NONE</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Command Menu -->
+        <div class="command-menu">
+            <div class="menu-section">
+                <div class="section-title">[ SEARCH & SCRAPE ]</div>
+                <button class="retro-btn" onclick="showSearchForm()">🔍 SEARCH JOBS</button>
+                <button class="retro-btn" onclick="viewRecentSearches()">📋 RECENT SEARCHES</button>
+            </div>
+            <div class="menu-section">
+                <div class="section-title">[ AI ENRICHMENT ]</div>
+                <button class="retro-btn" onclick="enrichJobs()">🤖 ENRICH JOBS</button>
+                <button class="retro-btn" onclick="viewGoodFitJobs()">⭐ VIEW GOOD FITS</button>
+            </div>
+            <div class="menu-section">
+                <div class="section-title">[ APPLICATION ]</div>
+                <button class="retro-btn" onclick="showApplyMenu()">✉️ APPLY TO JOBS</button>
+                <button class="retro-btn" onclick="viewApplicationHistory()">📊 HISTORY</button>
+            </div>
+            <div class="menu-section">
+                <div class="section-title">[ PROFILE & LOGS ]</div>
+                <button class="retro-btn" onclick="viewProfile()">👤 PROFILE</button>
+                <button class="retro-btn" onclick="viewLogs()">📜 VIEW LOGS</button>
+            </div>
+        </div>
+
+        <!-- Job List Panel -->
+        <div class="jobs-panel" id="jobs-panel" style="display: none;">
+            <div class="panel-header">
+                <span class="panel-title">▶ JOB LISTINGS</span>
+                <button class="btn-clear" onclick="closeJobsPanel()">CLOSE</button>
+            </div>
+            <div class="jobs-content" id="jobs-content">
+                <!-- Jobs will be populated here -->
+            </div>
+        </div>
+
+        <!-- Modal for Forms -->
+        <div class="modal" id="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="modal-title" id="modal-title">COMMAND INPUT</span>
+                    <button class="btn-close" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Dynamic form content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-text">
+                [F1] HELP | [F2] SEARCH | [F3] ENRICH | [F4] APPLY | [ESC] CANCEL | SERVER: http://localhost:8082
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

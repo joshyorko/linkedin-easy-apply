@@ -1,0 +1,14 @@
+# Ignore node_modules
+node_modules/
+npm-debug.log
+
+# Ignore documentation (keep in source, not container)
+*.md
+!README.md
+
+# Ignore scripts (not needed in container)
+start.sh
+status.sh
+
+# Ignore lock files (using package.json only)
+package-lock.json

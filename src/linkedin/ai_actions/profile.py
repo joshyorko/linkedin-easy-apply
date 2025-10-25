@@ -2,7 +2,7 @@ from sema4ai.actions import Response, action, chat
 import dotenv
 import os
 import json
-from typing import List, Optional
+from typing import List, Optional, Union
 from pathlib import Path
 
 from ..utils.resume_parser import parse_resume_from_file, _download_resume_from_url
@@ -147,9 +147,9 @@ def get_profile_history_list(limit: int = 20) -> Response:
 
 @action
 def update_profile_skills(
-    add_skills: Optional[List[str]] = None,
-    remove_skills: Optional[List[str]] = None,
-    set_skills: Optional[List[str]] = None
+    add_skills: Union[str, List[str], None] = None,
+    remove_skills: Union[str, List[str], None] = None,
+    set_skills: Union[str, List[str], None] = None
 ) -> Response:
     """
     Update skills in your active user profile without re-parsing resume.
@@ -174,6 +174,20 @@ def update_profile_skills(
         # Completely replace skills
         update_profile_skills(set_skills=["Python", "RPA", "UiPath", "Automation Anywhere"])
     """
+    # Sanitize empty strings/arrays to None
+    if isinstance(add_skills, str) and add_skills == "":
+        add_skills = None
+    elif isinstance(add_skills, list) and len(add_skills) == 0:
+        add_skills = None
+    if isinstance(remove_skills, str) and remove_skills == "":
+        remove_skills = None
+    elif isinstance(remove_skills, list) and len(remove_skills) == 0:
+        remove_skills = None
+    if isinstance(set_skills, str) and set_skills == "":
+        set_skills = None
+    elif isinstance(set_skills, list) and len(set_skills) == 0:
+        set_skills = None
+    
     try:
         conn = get_connection()
         
@@ -253,21 +267,21 @@ def update_profile_skills(
 
 @action
 def enrich_user_profile(
-    first_name: Optional[str] = None,
-    last_name: Optional[str] = None,
-    address_street: Optional[str] = None,
-    address_city: Optional[str] = None,
-    address_state: Optional[str] = None,
-    address_zip: Optional[str] = None,
-    work_authorization: Optional[str] = None,
+    first_name: Union[str, None] = None,
+    last_name: Union[str, None] = None,
+    address_street: Union[str, None] = None,
+    address_city: Union[str, None] = None,
+    address_state: Union[str, None] = None,
+    address_zip: Union[str, None] = None,
+    work_authorization: Union[str, None] = None,
     requires_visa_sponsorship: Optional[bool] = None,
-    security_clearance: Optional[str] = None,
+    security_clearance: Union[str, None] = None,
     salary_min: Optional[int] = None,
     salary_max: Optional[int] = None,
-    earliest_start_date: Optional[str] = None,
+    earliest_start_date: Union[str, None] = None,
     willing_to_relocate: Optional[bool] = None,
     years_of_experience: Optional[int] = None,
-    portfolio_url: Optional[str] = None
+    portfolio_url: Union[str, None] = None
 ) -> Response:
     """
     Enrich active user profile with additional fields not captured from resume.
@@ -310,6 +324,28 @@ def enrich_user_profile(
             years_of_experience=8
         )
     """
+    # Sanitize empty strings to None for all string parameters
+    if isinstance(first_name, str) and first_name == "":
+        first_name = None
+    if isinstance(last_name, str) and last_name == "":
+        last_name = None
+    if isinstance(address_street, str) and address_street == "":
+        address_street = None
+    if isinstance(address_city, str) and address_city == "":
+        address_city = None
+    if isinstance(address_state, str) and address_state == "":
+        address_state = None
+    if isinstance(address_zip, str) and address_zip == "":
+        address_zip = None
+    if isinstance(work_authorization, str) and work_authorization == "":
+        work_authorization = None
+    if isinstance(security_clearance, str) and security_clearance == "":
+        security_clearance = None
+    if isinstance(earliest_start_date, str) and earliest_start_date == "":
+        earliest_start_date = None
+    if isinstance(portfolio_url, str) and portfolio_url == "":
+        portfolio_url = None
+    
     try:
         conn = get_connection()
         

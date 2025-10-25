@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn.EXE Launcher</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+        }
+        .loader {
+            text-align: center;
+            color: #00ff00;
+        }
+        .ascii-logo {
+            font-size: 8px;
+            line-height: 1;
+            white-space: pre;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #00ff00; }
+            to { text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00; }
+        }
+        .status {
+            margin-top: 30px;
+            font-size: 20px;
+            color: #00ff00;
+        }
+        .dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loader">
+        <div class="ascii-logo">
+╔══════════════════════════════════════════════╗
+║  ██╗     ██╗███╗   ██╗██╗  ██╗███████╗██████╗  ║
+║  ██║     ██║████╗  ██║██║ ██╔╝██╔════╝██╔══██╗ ║
+║  ██║     ██║██╔██╗ ██║█████╔╝ █████╗  ██║  ██║ ║
+║  ██║     ██║██║╚██╗██║██╔═██╗ ██╔══╝  ██║  ██║ ║
+║  ███████╗██║██║ ╚████║██║  ██╗███████╗██████╔╝ ║
+║  ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝╚═════╝  ║
+╚══════════════════════════════════════════════╝
+        </div>
+        <div class="status">
+            INITIALIZING SYSTEM<span class="dots"></span>
+        </div>
+    </div>
+    
+    <script>
+        // Check if server is running
+        async function checkServer() {
+            try {
+                const response = await fetch('http://localhost:3001/api/health');
+                if (response.ok) {
+                    // Server is running, redirect to main UI
+                    window.location.href = '/index.html';
+                } else {
+                    throw new Error('Server not ready');
+                }
+            } catch (error) {
+                // Server not running, show error
+                document.querySelector('.status').innerHTML = 
+                    '<span style="color: #ff3333;">ERROR: Server not running</span><br>' +
+                    '<span style="font-size: 16px;">Please run: ./start.sh</span>';
+            }
+        }
+        
+        // Check server after 2 seconds
+        setTimeout(checkServer, 2000);
+    </script>
+</body>
+</html>
