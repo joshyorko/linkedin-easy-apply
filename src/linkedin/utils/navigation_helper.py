@@ -96,34 +96,64 @@ def navigate_and_fill_steps(page, dlg, profile: Dict[str, Any], answers: Dict[st
             
             # Look for Next/Continue or Review button
             next_btn = None
+            button_type = None
             
             # Fast button detection - try common patterns
             button_selectors = [
-                'button:has-text("Continue to next step")',
-                'button:has-text("Review your application")',
-                'button:has-text("Next")',
-                'button:has-text("Continue")',
-                'button[aria-label*="Continue"]',
-                'button[aria-label*="Review"]'
+                ('button:has-text("Continue to next step")', 'Continue'),
+                ('button:has-text("Review your application")', 'Review'),
+                ('button:has-text("Review")', 'Review'),
+                ('button:has-text("Next")', 'Next'),
+                ('button:has-text("Continue")', 'Continue'),
+                ('button[aria-label*="Continue"]', 'Continue'),
+                ('button[aria-label*="Review"]', 'Review'),
+                ('button[aria-label*="Next"]', 'Next'),
+                # LinkedIn-specific classes
+                ('button.artdeco-button--primary', 'Primary'),
+                ('footer button[aria-label]', 'Footer Button')
             ]
             
-            for sel in button_selectors:
+            print(f"[Navigation] Looking for Next/Continue/Review button...")
+            for sel, btn_type in button_selectors:
                 try:
                     btn = dlg.locator(sel).first
-                    if btn.count() > 0 and btn.is_visible() and btn.is_enabled():
-                        next_btn = btn
-                        break
-                except Exception:
+                    if btn.count() > 0 and btn.is_visible():
+                        # Check if enabled (but don't fail if check throws)
+                        try:
+                            is_enabled = btn.is_enabled()
+                        except Exception:
+                            is_enabled = True  # Assume enabled if check fails
+                        
+                        if is_enabled:
+                            next_btn = btn
+                            button_type = btn_type
+                            print(f"[Navigation] Found {btn_type} button: {sel}")
+                            break
+                except Exception as e:
+                    print(f"[Navigation] Selector '{sel}' failed: {e}")
                     continue
             
             if not next_btn:
-                print(f"[Navigation] No Next/Review button found - assuming final step")
+                print(f"[Navigation] ⚠️ No Next/Review button found - assuming final step")
+                print(f"[Navigation] Current progress: {progress}%, filled: {summary['total_filled']} fields")
                 break
             
             # Click the button
             try:
-                next_btn.click(timeout=5000)
-                print(f"[Navigation] ✓ Clicked Next/Review button")
+                # Try normal click first
+                try:
+                    next_btn.click(timeout=3000)
+                    print(f"[Navigation] ✓ Clicked {button_type} button (normal click)")
+                except Exception as e1:
+                    print(f"[Navigation] Normal click failed: {e1}")
+                    print(f"[Navigation] Trying force click...")
+                    try:
+                        next_btn.click(timeout=3000, force=True)
+                        print(f"[Navigation] ✓ Clicked {button_type} button (force click)")
+                    except Exception as e2:
+                        print(f"[Navigation] Force click also failed: {e2}")
+                        raise e2
+                
                 time.sleep(0.8)  # Wait for next step to load
                 
                 # Refresh dialog reference after navigation
@@ -133,7 +163,8 @@ def navigate_and_fill_steps(page, dlg, profile: Dict[str, Any], answers: Dict[st
                     break
                     
             except Exception as e:
-                print(f"[Navigation] Error clicking button: {e}")
+                print(f"[Navigation] ✗ Failed to click button after multiple attempts: {e}")
+                print(f"[Navigation] Breaking navigation loop")
                 break
         
         return summary

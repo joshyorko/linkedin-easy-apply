@@ -623,11 +623,32 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
                 # Check if field is already filled (LinkedIn pre-fills from profile)
                 is_prefilled, current_value = is_field_prefilled(el, category)
                 if is_prefilled:
-                    print(f"[Fill] ⏭️  Field '{label or field_id_value}' already has value: '{current_value}' - SKIPPING")
-                    summary["skipped_prefilled"] += 1
-                    # Only skip if we don't have a better answer, or if it's a critical field
-                    # For now, skip ALL prefilled fields to avoid overwriting LinkedIn data
-                    continue
+                    # If we have a provided answer, compare it with current value
+                    if provided is not None:
+                        # Check if our answer differs from pre-filled value
+                        provided_str = str(provided).strip().lower()
+                        current_str = str(current_value).strip().lower() if current_value else ""
+                        
+                        if provided_str == current_str:
+                            print(f"[Fill] ✓ Field '{label or field_id_value}' already has matching value: '{current_value}' - SKIPPING")
+                            summary["skipped_prefilled"] += 1
+                            summary["filled"] += 1  # Count as filled since it has the correct value
+                            continue
+                        else:
+                            print(f"[Fill] ⚠️  Field '{label or field_id_value}' has pre-filled value: '{current_value}' but LLM provided: '{provided}' - OVERWRITING")
+                            # Clear the field first, then fill with LLM answer
+                            try:
+                                el.fill("", timeout=1000)
+                                time.sleep(0.1)
+                            except Exception:
+                                pass
+                            # Don't skip - let it fall through to fill with LLM answer
+                    else:
+                        # No LLM answer provided, accept pre-filled value
+                        print(f"[Fill] ✓ Field '{label or field_id_value}' already has value: '{current_value}' (no LLM override)")
+                        summary["skipped_prefilled"] += 1
+                        summary["filled"] += 1  # Count as filled since it has a value
+                        continue
 
                 # Apply provided answers first
                 if provided is not None:
