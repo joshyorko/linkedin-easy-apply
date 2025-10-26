@@ -167,6 +167,31 @@ def navigate_and_fill_steps(page, dlg, profile: Dict[str, Any], answers: Dict[st
                 print(f"[Navigation] Breaking navigation loop")
                 break
         
+        # FALLBACK: Check if we're on the submit page even if progress != 100%
+        # This handles cases where progress indicator is missing or shows 99%
+        if not summary["reached_submit"]:
+            print(f"[Navigation] Fallback: Checking for Submit button...")
+            try:
+                submit_selectors = [
+                    'button:has-text("Submit application")',
+                    'button[aria-label*="Submit application"]',
+                    'button[aria-label*="Submit"]',
+                    'button:has-text("Submit")'
+                ]
+                
+                for sel in submit_selectors:
+                    try:
+                        submit_btn = dlg.locator(sel).first
+                        if submit_btn.count() > 0 and submit_btn.is_visible():
+                            print(f"[Navigation] ✓ Found Submit button via fallback - marking reached_submit=True")
+                            summary["reached_submit"] = True
+                            break
+                    except Exception:
+                        continue
+                        
+            except Exception as e:
+                print(f"[Navigation] Fallback check failed: {e}")
+        
         return summary
         
     except Exception as e:

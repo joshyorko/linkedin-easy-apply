@@ -34,7 +34,7 @@
 ### Prerequisites
 
 - Node.js 16+ installed
-- LinkedIn Easy Apply Action Server running on port 8080
+- LinkedIn Easy Apply Action Server running on port 8082 (or 8080)
 - SQLite database at `../src/linkedin_jobs.sqlite`
 
 ### Installation

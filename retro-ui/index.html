@@ -30,62 +30,35 @@
             </div>
         </div>
 
-        <!-- Main Terminal Area -->
-        <div class="terminal-wrapper">
-            <!-- Left Panel - Console Output -->
-            <div class="terminal-panel console-panel">
-                <div class="panel-header">
-                    <span class="panel-title">▶ CONSOLE OUTPUT</span>
-                    <button class="btn-clear" onclick="clearConsole()">CLEAR</button>
-                </div>
-                <div class="console-output" id="console-output">
-                    <div class="boot-sequence">
-                        <div class="boot-line">SYSTEM BOOT INITIATED...</div>
-                        <div class="boot-line">LOADING ACTION SERVER MODULE... OK</div>
-                        <div class="boot-line">CONNECTING TO SQLITE DATABASE... OK</div>
-                        <div class="boot-line">INITIALIZING BROWSER CONTEXT... OK</div>
-                        <div class="boot-line">CHECKING LINKEDIN SESSION... OK</div>
-                        <div class="boot-line success">█ READY FOR OPERATIONS █</div>
-                        <div class="boot-line">Type commands or use menu buttons...</div>
-                    </div>
-                </div>
+        <!-- System Status (Moved under banner) -->
+        <div class="status-bar">
+            <div class="stat-item">
+                <span class="stat-label">DATABASE:</span>
+                <span class="stat-value" id="db-status">CONNECTED</span>
             </div>
-
-            <!-- Right Panel - Status & Data -->
-            <div class="terminal-panel status-panel">
-                <div class="panel-header">
-                    <span class="panel-title">▶ SYSTEM STATUS</span>
-                </div>
-                <div class="status-content" id="status-content">
-                    <div class="stat-group">
-                        <div class="stat-label">DATABASE</div>
-                        <div class="stat-value" id="db-status">CONNECTED</div>
-                    </div>
-                    <div class="stat-group">
-                        <div class="stat-label">ACTION SERVER</div>
-                        <div class="stat-value" id="server-status">CHECKING...</div>
-                    </div>
-                    <div class="stat-group">
-                        <div class="stat-label">TOTAL JOBS</div>
-                        <div class="stat-value" id="total-jobs">0</div>
-                    </div>
-                    <div class="stat-group">
-                        <div class="stat-label">GOOD FIT</div>
-                        <div class="stat-value" id="good-fit-jobs">0</div>
-                    </div>
-                    <div class="stat-group">
-                        <div class="stat-label">APPLIED</div>
-                        <div class="stat-value" id="applied-jobs">0</div>
-                    </div>
-                    <div class="stat-group">
-                        <div class="stat-label">ACTIVE PROFILE</div>
-                        <div class="stat-value" id="active-profile">NONE</div>
-                    </div>
-                </div>
+            <div class="stat-item">
+                <span class="stat-label">ACTION SERVER:</span>
+                <span class="stat-value" id="server-status">CHECKING...</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">TOTAL JOBS:</span>
+                <span class="stat-value" id="total-jobs">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">GOOD FIT:</span>
+                <span class="stat-value" id="good-fit-jobs">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">APPLIED:</span>
+                <span class="stat-value" id="applied-jobs">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">ACTIVE PROFILE:</span>
+                <span class="stat-value" id="active-profile">NONE</span>
             </div>
         </div>
 
-        <!-- Command Menu -->
+        <!-- Command Menu (Moved to top) -->
         <div class="command-menu">
             <div class="menu-section">
                 <div class="section-title">[ SEARCH & SCRAPE ]</div>
@@ -100,12 +73,33 @@
             <div class="menu-section">
                 <div class="section-title">[ APPLICATION ]</div>
                 <button class="retro-btn" onclick="showApplyMenu()">✉️ APPLY TO JOBS</button>
+                <button class="retro-btn" onclick="showApplyByUrlForm()">🔗 APPLY BY URL</button>
+                <button class="retro-btn" onclick="checkReadyJobs()">✅ CHECK READY</button>
                 <button class="retro-btn" onclick="viewApplicationHistory()">📊 HISTORY</button>
             </div>
             <div class="menu-section">
                 <div class="section-title">[ PROFILE & LOGS ]</div>
                 <button class="retro-btn" onclick="viewProfile()">👤 PROFILE</button>
                 <button class="retro-btn" onclick="viewLogs()">📜 VIEW LOGS</button>
+            </div>
+        </div>
+
+        <!-- Console Output (Full Width) -->
+        <div class="terminal-panel console-panel">
+            <div class="panel-header">
+                <span class="panel-title">▶ CONSOLE OUTPUT</span>
+                <button class="btn-clear" onclick="clearConsole()">CLEAR</button>
+            </div>
+            <div class="console-output" id="console-output">
+                <div class="boot-sequence">
+                    <div class="boot-line">SYSTEM BOOT INITIATED...</div>
+                    <div class="boot-line">LOADING ACTION SERVER MODULE... OK</div>
+                    <div class="boot-line">CONNECTING TO SQLITE DATABASE... OK</div>
+                    <div class="boot-line">INITIALIZING BROWSER CONTEXT... OK</div>
+                    <div class="boot-line">CHECKING LINKEDIN SESSION... OK</div>
+                    <div class="boot-line success">█ READY FOR OPERATIONS █</div>
+                    <div class="boot-line">Type commands or use menu buttons...</div>
+                </div>
             </div>
         </div>
 

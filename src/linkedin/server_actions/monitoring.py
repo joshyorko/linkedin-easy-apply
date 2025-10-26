@@ -34,7 +34,7 @@ def check_run_status(run_id: str) -> Response:
         print(f"[ACTION] Checking status of run: {run_id}")
         
         # Call the built-in action server API using sema4ai_http
-        server_url = os.getenv("SERVER_URL", "http://localhost:8080")
+        server_url = os.getenv("SERVER_URL", "http://localhost:8082")
         api_url = f"{server_url}/api/runs/{run_id}"
         
         response = http_get(api_url)
@@ -247,7 +247,7 @@ def cancel_run(run_id: str) -> Response:
         print(f"[ACTION] Cancelling run: {run_id}")
         
         # First check if run is actually running
-        server_url = os.getenv("SERVER_URL", "http://localhost:8080")
+        server_url = os.getenv("SERVER_URL", "http://localhost:8082")
         status_url = f"{server_url}/api/runs/{run_id}"
         
         status_response = http_get(status_url)
@@ -316,7 +316,7 @@ def list_available_actions() -> Response:
     try:
         print(f"[ACTION] Listing available actions")
         
-        server_url = os.getenv("SERVER_URL", "http://localhost:8080")
+        server_url = os.getenv("SERVER_URL", "http://localhost:8082")
         api_url = f"{server_url}/api/actionPackages"
         
         response = http_get(api_url)
@@ -380,7 +380,7 @@ def get_action_run_logs(run_id: str) -> Response[str]:
     try:
         print(f"[ACTION] Fetching logs for run: {run_id}")
         
-        server_url = os.getenv("SERVER_URL", "http://localhost:8080")
+        server_url = os.getenv("SERVER_URL", "http://localhost:8082")
         
         # The action server stores output in a special artifact
         artifact = "__action_server_output.txt"
@@ -426,7 +426,7 @@ def get_action_run_logs_latest() -> Response[str]:
     try:
         print(f"[ACTION] Fetching logs for latest run")
         
-        server_url = os.getenv("SERVER_URL", "http://localhost:8080")
+        server_url = os.getenv("SERVER_URL", "http://localhost:8082")
         
         # Get the list of runs
         runs_list_url = urllib.parse.urljoin(server_url, "/api/runs")

@@ -32,6 +32,15 @@ if curl -s http://localhost:8082/ > /dev/null 2>&1; then
 else
     echo -e "${RED}✗ OFFLINE${NC}"
     ACTION_STATUS="OFFLINE"
+    # Try port 8080 as fallback
+    echo -n "🔍 Checking alternate port 8080... "
+    if curl -s http://localhost:8080/ > /dev/null 2>&1; then
+        echo -e "${YELLOW}✓ RUNNING (but on 8080 instead of 8082)${NC}"
+        echo -e "   ${YELLOW}Update app.js to use port 8080${NC}"
+        ACTION_STATUS="WRONG_PORT"
+    else
+        echo -e "${RED}✗ OFFLINE${NC}"
+    fi
 fi
 
 # Check Database

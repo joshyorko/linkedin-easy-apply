@@ -217,19 +217,60 @@ def _apply_to_job_core(
                         submit_btn.click(timeout=5000)
                         print(f"[Core] ✅ SUBMITTED application")
                         result["submitted"] = True
-                        time.sleep(1.5)
+                        time.sleep(2.0)  # Wait for submission to process
                         
-                        # Quick verification - check if dialog closed
+                        # ENHANCED VERIFICATION: Check LinkedIn "My Jobs" page
+                        # This is the most reliable verification method
+                        verification_passed = False
+                        verification_methods = []
+                        
                         try:
-                            if dlg.count() == 0 or not dlg.is_visible():
-                                print(f"[Core] ✓ Dialog closed - submission successful")
+                            # PRIMARY CHECK: Navigate to Applied Jobs page and verify job is there
+                            print(f"[Core] Verifying submission via 'My Jobs' page...")
+                            page.goto("https://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED", timeout=30000)
+                            time.sleep(2.5)  # Allow page to fully load
+                            
+                            page_content = page.content()
+                            if job_id in page_content:
+                                print(f"[Core] ✓ VERIFIED: Job {job_id} found in Applied Jobs page")
+                                result["verified"] = True
+                                result["verification_message"] = f"Verified: Job {job_id} appears on LinkedIn Applied Jobs page"
+                                verification_passed = True
+                                verification_methods.append("LinkedIn Applied Jobs page")
                             else:
-                                success_msgs = page.locator('text=/application.*submitted|successfully.*applied/i')
-                                if success_msgs.count() > 0:
-                                    print(f"[Core] ✓ Success message found")
-                        except Exception:
-                            pass
+                                print(f"[Core] ⚠️ Job {job_id} not yet visible on Applied Jobs page (may need time to propagate)")
+                                result["verification_message"] = f"Job {job_id} not yet visible on Applied Jobs page (may take 1-2 minutes)"
                         
+                        except Exception as e:
+                            print(f"[Core] Applied Jobs page check failed: {e}")
+                            result["verification_message"] = f"Could not verify via Applied Jobs page: {e}"
+                        
+                        # FALLBACK CHECKS (less reliable but still useful)
+                        if not verification_passed:
+                            try:
+                                # Return to job page to check for "Applied" badge
+                                print(f"[Core] Fallback: Checking job page for 'Applied' badge...")
+                                page.goto(job_url, timeout=30000)
+                                time.sleep(1.5)
+                                
+                                # Look for "Applied" indicator
+                                applied_indicators = page.locator('text=/Applied|You applied|application sent/i')
+                                if applied_indicators.count() > 0:
+                                    indicator_text = applied_indicators.first.inner_text()
+                                    print(f"[Core] ✓ Found 'Applied' indicator: {indicator_text}")
+                                    result["verified"] = True
+                                    result["verification_message"] = f"Verified: 'Applied' badge found on job page"
+                                    verification_passed = True
+                                    verification_methods.append("Job page 'Applied' badge")
+                            
+                            except Exception as e:
+                                print(f"[Core] Job page fallback check failed: {e}")
+                        
+                        if verification_passed:
+                            print(f"[Core] ✅ Verification successful via: {', '.join(verification_methods)}")
+                        else:
+                            print(f"[Core] ⚠️ Could not verify submission - check logs and Applied Jobs page manually")
+                                
                     except Exception as e:
                         print(f"[Core] ✗ Error clicking Submit: {e}")
                         result["error"] = f"Submit click failed: {e}"

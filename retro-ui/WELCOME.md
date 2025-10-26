@@ -217,7 +217,7 @@ This UI turns job hunting into a retro computing adventure. Navigate your career
 ║                                                       ║
 ║  🌐 URL:  http://localhost:3001/index.html           ║
 ║  🔧 Port: 3001 (UI Backend)                          ║
-║  🤖 Port: 8082 (Action Server)                       ║
+║  🤖 Port: 8082 (Action Server) [DETECTED]           ║
 ║  💾 DB:   ../src/linkedin_jobs.sqlite                ║
 ║                                                       ║
 ║  ⌨️  SHORTCUTS:                                       ║

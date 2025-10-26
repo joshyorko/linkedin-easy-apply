@@ -137,17 +137,17 @@ run: ## Run the container locally
 	@echo -e "$(BLUE)Starting container...$(NC)"
 	docker run -d \
 		--name linkedin-easy-apply \
-		-p 8080:8080 \
+		-p 8082:8082 \
 		--env-file .env \
 		$(FULL_IMAGE_NAME):$(IMAGE_TAG)
 	@echo -e "$(GREEN)✓ Container started$(NC)"
-	@echo -e "$(YELLOW)Access at: http://localhost:8080$(NC)"
+	@echo -e "$(YELLOW)Access at: http://localhost:8082$(NC)"
 
 .PHONY: run-it
 run-it: ## Run container interactively with shell
 	@echo -e "$(BLUE)Starting interactive container...$(NC)"
 	docker run -it --rm \
-		-p 8080:8080 \
+		-p 8082:8082 \
 		--env-file .env \
 		$(FULL_IMAGE_NAME):$(IMAGE_TAG) \
 		/bin/bash

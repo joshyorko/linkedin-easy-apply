@@ -20,13 +20,13 @@ Then open in browser: **http://localhost:3001/index.html**
 ## ⚡ Prerequisites Checklist
 
 - [x] Node.js 16+ installed
-- [x] Action server running on port 8080
+- [x] Action server running on port 8082 (or 8080)
 - [x] SQLite database exists at `../src/linkedin_jobs.sqlite`
 
 To start action server:
 ```bash
 cd ..
-action-server start --port 8080
+action-server start --port 8082
 ```
 
 ## 🎮 Quick Workflow

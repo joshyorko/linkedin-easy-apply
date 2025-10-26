@@ -14,15 +14,19 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Check if action server is running
+# Check if action server is running (try both ports)
 echo -n "Checking Action Server... "
-if curl -s http://localhost:8080/api/actions > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Running${NC}"
+if curl -s http://localhost:8082/ > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Running on port 8082${NC}"
+elif curl -s http://localhost:8080/ > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Running on port 8080${NC}"
+    echo -e "${YELLOW}Note: Detected on port 8080, but retro-ui expects 8082${NC}"
+    echo "You may need to update app.js CONFIG.ACTION_SERVER_URL"
 else
     echo -e "${RED}✗ Not Running${NC}"
     echo ""
-    echo -e "${YELLOW}Action server not detected on port 8080${NC}"
-    echo "Please start it first with: action-server start --port 8080"
+    echo -e "${YELLOW}Action server not detected on port 8080 or 8082${NC}"
+    echo "Please start it first with: action-server start --port 8082"
     echo ""
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo

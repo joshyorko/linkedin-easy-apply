@@ -5,7 +5,7 @@
 const CONFIG = {
     ACTION_SERVER_URL: 'http://localhost:8082',  // Updated to match running server
     PROXY_SERVER_URL: 'http://localhost:3001',
-    REFRESH_INTERVAL: 5000,
+    REFRESH_INTERVAL: 5000,  // Fast polling (5 seconds) - optimized to be silent
 };
 
 // State Management
@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeUI();
     checkServerStatus();
     loadStats();
-    startAutoRefresh();
+    startAutoRefresh();  // Poll for updates
     setupKeyboardShortcuts();
 });
 
@@ -73,7 +73,8 @@ function clearConsole() {
 // Server Status Check
 async function checkServerStatus() {
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions`);
+        // Check if action server root is accessible
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/`);
         if (response.ok) {
             document.getElementById('server-status').textContent = 'ONLINE';
             document.getElementById('server-status').style.color = '#00ff00';
@@ -91,79 +92,76 @@ async function checkServerStatus() {
 // Load Statistics from Database
 async function loadStats() {
     try {
-        log('info', 'Loading statistics from database...');
+        // Silent background refresh - no console logging during auto-refresh
+        const isAutoRefresh = arguments[0] === true;
+        
+        if (!isAutoRefresh) {
+            log('info', 'Loading statistics from database...');
+        }
         
         // Query total jobs
-        const totalResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: 'SELECT COUNT(*) as count FROM job_postings'
-            })
-        });
+        const totalResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/total-jobs`);
         
         if (totalResponse.ok) {
             const totalData = await totalResponse.json();
-            state.stats.totalJobs = totalData.results[0]?.count || 0;
-            document.getElementById('total-jobs').textContent = state.stats.totalJobs;
+            const newTotal = totalData.results[0]?.count || 0;
+            if (state.stats.totalJobs !== newTotal) {
+                state.stats.totalJobs = newTotal;
+                document.getElementById('total-jobs').textContent = state.stats.totalJobs;
+            }
         }
         
         // Query good fit jobs
-        const goodFitResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: 'SELECT COUNT(*) as count FROM job_postings WHERE good_fit = 1'
-            })
-        });
+        const goodFitResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/good-fit-count`);
         
         if (goodFitResponse.ok) {
             const goodFitData = await goodFitResponse.json();
-            state.stats.goodFitJobs = goodFitData.results[0]?.count || 0;
-            document.getElementById('good-fit-jobs').textContent = state.stats.goodFitJobs;
+            const newGoodFit = goodFitData.results[0]?.count || 0;
+            if (state.stats.goodFitJobs !== newGoodFit) {
+                state.stats.goodFitJobs = newGoodFit;
+                document.getElementById('good-fit-jobs').textContent = state.stats.goodFitJobs;
+            }
         }
         
         // Query applied jobs
-        const appliedResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: 'SELECT COUNT(*) as count FROM job_postings WHERE is_applied = 1'
-            })
-        });
+        const appliedResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/applied-count`);
         
         if (appliedResponse.ok) {
             const appliedData = await appliedResponse.json();
-            state.stats.appliedJobs = appliedData.results[0]?.count || 0;
-            document.getElementById('applied-jobs').textContent = state.stats.appliedJobs;
+            const newApplied = appliedData.results[0]?.count || 0;
+            if (state.stats.appliedJobs !== newApplied) {
+                state.stats.appliedJobs = newApplied;
+                document.getElementById('applied-jobs').textContent = state.stats.appliedJobs;
+            }
         }
         
         // Query active profile
-        const profileResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: 'SELECT profile_name FROM user_profiles WHERE is_active = 1'
-            })
-        });
+        const profileResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/active-profile`);
         
         if (profileResponse.ok) {
             const profileData = await profileResponse.json();
             const profileName = profileData.results[0]?.profile_name || 'NONE';
-            state.stats.activeProfile = profileName;
-            document.getElementById('active-profile').textContent = profileName;
+            if (state.stats.activeProfile !== profileName) {
+                state.stats.activeProfile = profileName;
+                document.getElementById('active-profile').textContent = profileName;
+            }
         }
         
-        log('success', 'Statistics loaded successfully');
+        if (!isAutoRefresh) {
+            log('success', 'Statistics loaded successfully');
+        }
     } catch (error) {
-        log('error', `Failed to load statistics: ${error.message}`);
+        // Only log errors during manual refresh, silent during auto-refresh
+        if (arguments[0] !== true) {
+            log('error', `Failed to load statistics: ${error.message}`);
+        }
     }
 }
 
-// Auto-refresh stats
+// Auto-refresh stats (polling for updates)
 function startAutoRefresh() {
     setInterval(() => {
-        loadStats();
+        loadStats(true);  // Pass true to indicate auto-refresh (silent mode)
         checkServerStatus();
     }, CONFIG.REFRESH_INTERVAL);
 }
@@ -286,7 +284,7 @@ async function executeSearch(event) {
     log('info', 'This may take several minutes...');
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/search-linkedin-easy-apply/run`, {
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/search-linkedin-easy-apply/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -315,19 +313,7 @@ async function viewRecentSearches() {
     log('info', 'Loading recent searches...');
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `SELECT DISTINCT run_id, COUNT(*) as job_count, 
-                        MAX(scraped_at) as last_scraped 
-                        FROM job_postings 
-                        WHERE run_id LIKE 'search_%' 
-                        GROUP BY run_id 
-                        ORDER BY last_scraped DESC 
-                        LIMIT 10`
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/search-history`);
         
         if (response.ok) {
             const data = await response.json();
@@ -375,17 +361,7 @@ async function loadJobsByRunId(runId) {
     log('info', `Loading jobs from run: ${runId}...`);
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `SELECT job_id, title, company, location_raw, good_fit, 
-                        is_applied, fit_score, job_url 
-                        FROM job_postings 
-                        WHERE run_id = '${runId}' 
-                        ORDER BY fit_score DESC`
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/jobs-by-run/${runId}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -432,13 +408,7 @@ async function viewJobDetails(jobId) {
     log('info', `Loading details for job: ${jobId}...`);
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `SELECT * FROM job_postings WHERE job_id = '${jobId}'`
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/job-details/${jobId}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -508,7 +478,7 @@ async function enrichJobs() {
     try {
         const payload = runId ? { run_id: runId } : {};
         
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/enrich-and-generate-answers/run`, {
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/enrich-and-generate-answers/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -532,24 +502,13 @@ async function viewGoodFitJobs() {
     log('info', 'Loading good fit jobs...');
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `SELECT job_id, title, company, location_raw, good_fit, 
-                        is_applied, fit_score, job_url 
-                        FROM job_postings 
-                        WHERE good_fit = 1 
-                        ORDER BY fit_score DESC 
-                        LIMIT 50`
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/good-fit-jobs`);
         
         if (response.ok) {
-            const data = await response.json();
-            state.jobs = data.results;
+            const jobs = await response.json();
+            state.jobs = jobs;
             displayJobs(state.jobs);
-            log('success', `Loaded ${data.results.length} good fit jobs`);
+            log('success', `Loaded ${jobs.length} good fit jobs`);
         }
     } catch (error) {
         log('error', `Failed to load good fit jobs: ${error.message}`);
@@ -577,6 +536,187 @@ function showApplyMenu() {
     openModal('APPLICATION MENU', menuHtml);
 }
 
+// Apply by URL Form
+function showApplyByUrlForm() {
+    const formHtml = `
+        <form onsubmit="applyByUrl(event)">
+            <div class="form-group">
+                <label>LinkedIn Job URL or ID:</label>
+                <input type="text" id="apply-job-url" required 
+                       placeholder="https://www.linkedin.com/jobs/view/1234567890 or just 1234567890">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="apply-headless" checked>
+                    Run in headless mode (no visible browser)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="apply-allow-submit">
+                    Actually submit application (unchecked = dry run)
+                </label>
+            </div>
+            <button type="submit" class="retro-btn">▶ APPLY NOW</button>
+        </form>
+    `;
+    openModal('APPLY BY URL', formHtml);
+}
+
+// Execute Apply by URL
+async function applyByUrl(event) {
+    event.preventDefault();
+    closeModal();
+    
+    const jobUrl = document.getElementById('apply-job-url').value;
+    const headless = document.getElementById('apply-headless').checked;
+    const allowSubmit = document.getElementById('apply-allow-submit').checked;
+    
+    log('info', `Applying to job: ${jobUrl}...`);
+    if (!allowSubmit) {
+        log('warning', 'DRY RUN mode - application will NOT be submitted');
+    }
+    log('info', 'This may take a few minutes...');
+    
+    try {
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/apply-to-job-by-url/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                job_url: jobUrl,
+                headless: headless,
+                allow_submit: allowSubmit
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.result?.success) {
+                log('success', 'Application completed!');
+                log('info', `Job ID: ${result.result.job_id || 'unknown'}`);
+                if (result.result.easy_apply_available === false) {
+                    log('warning', 'Job does not have Easy Apply option');
+                }
+            } else {
+                log('error', `Application failed: ${result.result?.error || 'Unknown error'}`);
+            }
+            loadStats();
+        } else {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (error) {
+        log('error', `Application failed: ${error.message}`);
+    }
+}
+
+// Check Ready Jobs
+async function checkReadyJobs() {
+    log('info', 'Checking which jobs are ready to apply...');
+    log('info', 'This queries the database for enriched jobs with good fit scores...');
+    
+    try {
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/check-which-jobs-ready/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            const stats = result.result?.filtering_stats || {};
+            const jobIds = result.result?.job_ids_ready || [];
+            
+            log('success', `✓ Found ${jobIds.length} jobs ready to apply!`);
+            log('info', `📊 Statistics:`);
+            log('info', `  • Total with answers: ${stats.total_with_answers || 0}`);
+            log('info', `  • Already applied: ${stats.already_applied || 0}`);
+            log('info', `  • Bad fit filtered: ${stats.bad_fit_filtered || 0}`);
+            log('info', `  • Ready to apply: ${stats.ready_to_apply || 0}`);
+            
+            if (jobIds.length > 0) {
+                log('info', `📋 Loading full job details for ${jobIds.length} jobs...`);
+                
+                // Fetch full job details from database
+                const jobIdsParam = jobIds.join(',');
+                const dbResponse = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/jobs-by-ids?ids=${encodeURIComponent(jobIdsParam)}`);
+                
+                if (dbResponse.ok) {
+                    const data = await dbResponse.json();
+                    displayReadyJobs(data.results);
+                    log('success', `✓ Jobs displayed in Job Listings panel below!`);
+                    log('info', `💡 Scroll down to see the full list and apply to individual jobs`);
+                } else {
+                    throw new Error('Failed to fetch job details from database');
+                }
+            } else {
+                displayReadyJobs([]);
+                log('warning', '⚠️ No jobs ready to apply. Make sure to:');
+                log('info', '  1. Run a job search first');
+                log('info', '  2. Run AI enrichment to analyze jobs');
+                log('info', '  3. Check that you have a profile uploaded');
+            }
+        } else {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (error) {
+        log('error', `❌ Check failed: ${error.message}`);
+        log('error', 'Make sure the Action Server is running and accessible');
+    }
+}
+
+// Display Ready Jobs in Panel
+function displayReadyJobs(jobs) {
+    const jobsPanel = document.getElementById('jobs-panel');
+    const jobsContent = document.getElementById('jobs-content');
+    
+    if (!jobs || jobs.length === 0) {
+        jobsContent.innerHTML = '<div class="job-item" style="text-align: center; color: #ffaa00;">NO JOBS READY TO APPLY</div>';
+        jobsPanel.style.display = 'block';
+        return;
+    }
+    
+    let html = '';
+    
+    jobs.forEach((job, index) => {
+        const fitScore = job.fit_score ? (job.fit_score * 100).toFixed(0) : '0';
+        html += `
+            <div class="job-item" style="border-left: 3px solid #00ff00;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <div class="job-title">${index + 1}. ${job.title || 'Unknown Title'}</div>
+                        <div class="job-company">${job.company || 'Unknown Company'}</div>
+                        <div class="job-meta">${job.location_raw || 'Location not specified'}</div>
+                        ${job.date_posted ? `<div class="job-meta" style="margin-top: 5px;">Posted: ${job.date_posted}</div>` : ''}
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="badge badge-fit" style="font-size: 18px; padding: 8px 12px;">
+                            ✓ ${fitScore}% FIT
+                        </span>
+                    </div>
+                </div>
+                <div class="job-badges" style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button class="retro-btn" onclick="applyToSingleJob('${job.job_id}')" 
+                            style="flex: 1; margin: 0; padding: 10px; font-size: 18px;">
+                        ⚡ APPLY NOW
+                    </button>
+                    <a href="${job.job_url}" target="_blank" class="retro-btn" 
+                       style="flex: 1; margin: 0; padding: 10px; font-size: 18px; text-decoration: none; display: block; text-align: center;">
+                        🔗 VIEW ON LINKEDIN
+                    </a>
+                    <button class="retro-btn" onclick="viewJobDetails('${job.job_id}')" 
+                            style="margin: 0; padding: 10px; font-size: 18px;">
+                        📋 DETAILS
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    jobsContent.innerHTML = html;
+    jobsPanel.style.display = 'block';
+    log('info', `Displaying ${jobs.length} ready jobs in Job Listings panel below`);
+}
+
 async function applyToGoodFitJobs() {
     closeModal();
     log('info', 'Starting batch application to all good fit jobs...');
@@ -588,18 +728,61 @@ async function applyToGoodFitJobs() {
 
 async function applyToSingleJob(jobId) {
     closeModal();
+    
+    // Show confirmation modal with options
+    const confirmHtml = `
+        <div style="text-align: center;">
+            <p style="margin-bottom: 20px;">Apply to job: <strong>${jobId}</strong></p>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="confirm-headless" checked>
+                    Run in headless mode (no visible browser)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="confirm-submit" checked>
+                    Actually submit application (uncheck for dry run)
+                </label>
+            </div>
+            <button class="retro-btn" onclick="confirmApply('${jobId}')">✅ CONFIRM & APPLY</button>
+            <button class="retro-btn" onclick="closeModal()">❌ CANCEL</button>
+        </div>
+    `;
+    openModal('CONFIRM APPLICATION', confirmHtml);
+}
+
+async function confirmApply(jobId) {
+    const headless = document.getElementById('confirm-headless').checked;
+    const allowSubmit = document.getElementById('confirm-submit').checked;
+    
+    closeModal();
     log('info', `Applying to job: ${jobId}...`);
+    if (!allowSubmit) {
+        log('warning', 'DRY RUN mode - application will NOT be submitted');
+    }
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/apply-to-job-by-url/run`, {
+        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/apply-to-job-by-url/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_id: jobId })
+            body: JSON.stringify({ 
+                job_url: jobId,
+                headless: headless,
+                allow_submit: allowSubmit
+            })
         });
         
         if (response.ok) {
             const result = await response.json();
-            log('success', `Application submitted for job: ${jobId}`);
+            if (result.result?.success) {
+                log('success', `Application completed for job: ${jobId}`);
+                if (result.result.easy_apply_available === false) {
+                    log('warning', 'Job does not have Easy Apply option');
+                }
+            } else {
+                log('error', `Application failed: ${result.result?.error || 'Unknown error'}`);
+            }
             loadStats();
         } else {
             throw new Error(`Server returned ${response.status}`);
@@ -614,13 +797,7 @@ async function viewProfile() {
     log('info', 'Loading active profile...');
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: 'SELECT * FROM user_profiles WHERE is_active = 1'
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile`);
         
         if (response.ok) {
             const data = await response.json();
@@ -668,17 +845,7 @@ async function viewApplicationHistory() {
     log('info', 'Loading application history...');
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `SELECT job_id, title, company, updated_at 
-                        FROM job_postings 
-                        WHERE is_applied = 1 
-                        ORDER BY updated_at DESC 
-                        LIMIT 50`
-            })
-        });
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/application-history`);
         
         if (response.ok) {
             const data = await response.json();
@@ -714,28 +881,109 @@ function displayApplicationHistory(applications) {
 }
 
 // View Logs
-function viewLogs() {
-    const logContent = `
-        <div style="color: #00ff00;">
-            <h3>Recent Log Files:</h3>
-            <p style="margin: 20px 0;">
-                Log files are stored in: <strong>output/</strong> directory<br>
-                Each search/apply session creates a separate log folder.
-            </p>
-            <p>
-                To view detailed logs with screenshots:<br>
-                1. Navigate to <code>output/{run_id}/log.html</code><br>
-                2. Open in browser for full report
-            </p>
-            <div style="margin-top: 30px; text-align: center;">
-                <button class="retro-btn" onclick="window.open('output/', '_blank')" 
-                        style="display: inline-block; width: auto;">
-                    📂 OPEN OUTPUT FOLDER
-                </button>
+async function viewLogs() {
+    log('info', 'Loading available log files from output directory...');
+    
+    try {
+        // Use the proxy server to query for action runs
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/query/runs-with-stats`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayLogsList(data.results);
+        } else {
+            throw new Error('Failed to fetch log data');
+        }
+    } catch (error) {
+        log('error', `Failed to load logs: ${error.message}`);
+        // Fallback to basic message
+        const logContent = `
+            <div style="color: #ff3333; text-align: center;">
+                <h3>Unable to load logs from database</h3>
+                <p style="margin: 20px 0;">
+                    Error: ${error.message}
+                </p>
+                <p>
+                    Log files are stored in: <strong>output/</strong> directory<br>
+                    Each run creates a folder with log.html inside.
+                </p>
             </div>
+        `;
+        openModal('LOG FILES', logContent);
+    }
+}
+
+function displayLogsList(runs) {
+    const tableHtml = `
+        <div style="margin-bottom: 15px; color: #00aaaa;">
+            <strong>Available Action Logs</strong><br>
+            <span style="font-size: 16px;">Each run creates detailed logs with screenshots in the output/ directory</span>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>RUN ID</th>
+                    <th>TYPE</th>
+                    <th>JOBS</th>
+                    <th>APPLIED</th>
+                    <th>TIMESTAMP</th>
+                    <th>ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${runs.map(run => {
+                    const runType = run.run_id.split('_')[0].toUpperCase();
+                    const appliedCount = run.applied_jobs ? run.applied_jobs.split(',').length : 0;
+                    const timestamp = run.timestamp ? new Date(run.timestamp).toLocaleString() : 'N/A';
+                    const logPath = `output/${run.run_id}/log.html`;
+                    
+                    return `
+                        <tr>
+                            <td style="font-family: 'VT323', monospace; font-size: 14px;">${run.run_id}</td>
+                            <td>
+                                <span class="badge ${runType === 'SEARCH' ? 'badge-fit' : runType === 'APPLY' ? 'badge-applied' : 'badge-remote'}">
+                                    ${runType}
+                                </span>
+                            </td>
+                            <td>${run.job_count || 0}</td>
+                            <td>${appliedCount}</td>
+                            <td style="font-size: 14px;">${timestamp}</td>
+                            <td>
+                                <button class="retro-btn" 
+                                        onclick="openLogFile('${run.run_id}')" 
+                                        style="margin: 0; padding: 5px 10px; font-size: 16px;">
+                                    📜 VIEW LOG
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+        <div style="margin-top: 20px; text-align: center; padding: 15px; border: 1px solid #00aaaa; background: rgba(0,170,170,0.1);">
+            <strong style="color: #00aaaa;">� TIP:</strong> 
+            Log files include detailed execution traces, screenshots, and error messages.<br>
+            Files are stored in: <code>output/{run_id}/log.html</code>
         </div>
     `;
-    openModal('LOG FILES', logContent);
+    openModal('ACTION LOGS', tableHtml);
+}
+
+function openLogFile(runId) {
+    // Construct the correct path - going up one level from retro-ui to reach output/
+    const logUrl = `/output/${runId}/log.html`;
+    log('info', `Opening log file for: ${runId}`);
+    log('info', `URL: ${logUrl}`);
+    
+    // Open in new tab
+    const newWindow = window.open(logUrl, '_blank');
+    
+    // Check if popup was blocked
+    if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+        log('error', 'Pop-up blocked! Please allow pop-ups for this site.');
+        // Fallback: try to navigate in same window
+        window.location.href = logUrl;
+    }
 }
 
 // Modal Functions

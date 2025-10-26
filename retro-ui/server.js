@@ -17,6 +17,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// Serve output directory (logs) from parent folder
+app.use('/output', express.static(path.join(__dirname, '..', 'output')));
+
 // Database connection
 function initDatabase() {
     if (dbType === 'postgres') {
@@ -84,7 +87,164 @@ async function executeQuery(query, params = []) {
 
 // API Routes
 
-// Query database (safe, read-only)
+// Internal query helper - NOT exposed as endpoint
+async function internalQuery(query, params = []) {
+    try {
+        const rows = await executeQuery(query, params);
+        return { success: true, results: rows, count: rows.length };
+    } catch (err) {
+        console.error('❌ Query error:', err.message);
+        throw err;
+    }
+}
+
+// Predefined safe query endpoints - no raw SQL exposure
+app.get('/api/query/total-jobs', async (req, res) => {
+    try {
+        const result = await internalQuery('SELECT COUNT(*) as count FROM job_postings');
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/good-fit-count', async (req, res) => {
+    try {
+        const result = await internalQuery('SELECT COUNT(*) as count FROM job_postings WHERE good_fit = true OR good_fit = 1');
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/applied-count', async (req, res) => {
+    try {
+        const result = await internalQuery('SELECT COUNT(*) as count FROM job_postings WHERE is_applied = true OR is_applied = 1');
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/active-profile', async (req, res) => {
+    try {
+        const result = await internalQuery('SELECT profile_name FROM user_profiles WHERE is_active = true OR is_active = 1');
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/runs-with-stats', async (req, res) => {
+    try {
+        const query = `
+            SELECT DISTINCT run_id, 
+            COUNT(*) as job_count,
+            MAX(scraped_at) as timestamp,
+            GROUP_CONCAT(DISTINCT CASE WHEN is_applied = 1 THEN job_id END) as applied_jobs
+            FROM job_postings 
+            GROUP BY run_id 
+            ORDER BY timestamp DESC 
+            LIMIT 20
+        `;
+        const result = await internalQuery(query);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/job-details/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+    try {
+        const query = dbType === 'postgres' 
+            ? 'SELECT * FROM job_postings WHERE job_id = $1'
+            : 'SELECT * FROM job_postings WHERE job_id = ?';
+        const result = await internalQuery(query, [jobId]);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/jobs-by-run/:runId', async (req, res) => {
+    const { runId } = req.params;
+    try {
+        const query = `
+            SELECT job_id, title, company, location_raw, location_type, 
+                   good_fit, is_applied, fit_score, job_url, 
+                   ai_confidence_score, experience_level
+            FROM job_postings 
+            WHERE run_id = ${dbType === 'postgres' ? '$1' : '?'}
+            ORDER BY fit_score DESC
+        `;
+        const result = await internalQuery(query, [runId]);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/jobs-by-ids', async (req, res) => {
+    const { ids } = req.query;
+    if (!ids) {
+        return res.status(400).json({ error: 'ids parameter required' });
+    }
+    
+    try {
+        const jobIds = ids.split(',').map(id => id.trim());
+        const placeholders = jobIds.map((_, i) => dbType === 'postgres' ? `$${i+1}` : '?').join(',');
+        const query = `
+            SELECT job_id, title, company, location_raw, good_fit, 
+                   fit_score, job_url, date_posted 
+            FROM job_postings 
+            WHERE job_id IN (${placeholders})
+            ORDER BY fit_score DESC
+        `;
+        const result = await internalQuery(query, jobIds);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/search-history', async (req, res) => {
+    try {
+        const query = `
+            SELECT DISTINCT run_id, COUNT(*) as job_count, 
+                    MAX(scraped_at) as last_scraped 
+            FROM job_postings 
+            WHERE run_id LIKE 'search_%' 
+            GROUP BY run_id 
+            ORDER BY last_scraped DESC 
+            LIMIT 10
+        `;
+        const result = await internalQuery(query);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/query/application-history', async (req, res) => {
+    const limit = req.query.limit || 50;
+    try {
+        const query = `
+            SELECT job_id, title, company, updated_at 
+            FROM job_postings 
+            WHERE is_applied = ${dbType === 'postgres' ? 'true' : '1'} 
+            ORDER BY updated_at DESC 
+            LIMIT ${dbType === 'postgres' ? '$1' : '?'}
+        `;
+        const result = await internalQuery(query, [limit]);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Query database (safe, read-only) - DEPRECATED but kept for backwards compatibility
+// TODO: Remove this in future version after migrating all calls to specific endpoints
 app.post('/api/query', async (req, res) => {
     const { query } = req.body;
     
@@ -97,6 +257,7 @@ app.post('/api/query', async (req, res) => {
         return res.status(403).json({ error: 'Only SELECT queries are allowed' });
     }
     
+    console.log('⚠️  DEPRECATED: /api/query endpoint used. Please migrate to specific endpoints.');
     console.log('📊 Executing query:', query);
     
     try {
