@@ -141,6 +141,7 @@ def get_jobs_with_enriched_answers() -> List[str]:
     - Have NOT been applied to yet (is_applied = false)
     - Are marked as good_fit (good_fit = true)
     - Have a minimum fit score (fit_score >= 0.6)
+    - Have valid job details (not "Unknown Title")
     """
     conn = get_connection()
     
@@ -153,6 +154,9 @@ def get_jobs_with_enriched_answers() -> List[str]:
               AND (jp.is_applied = 0 OR jp.is_applied IS NULL)
               AND jp.good_fit = 1
               AND (jp.fit_score >= 0.6 OR jp.fit_score IS NULL)
+              AND jp.title IS NOT NULL
+              AND jp.title != ''
+              AND jp.title != 'Unknown Title'
             ORDER BY ea.generated_at DESC
         """).fetchall()
         

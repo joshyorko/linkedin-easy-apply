@@ -119,6 +119,7 @@ def _scrape_job_details_from_page(page, job_id: str) -> Dict[str, Any]:
     
     except Exception as e:
         log.warn(f"Error scraping job details: {e}")
+        log.warn("Job will be saved with minimal data - recommend manual review")
         return {
             "job_id": job_id,
             "title": "Unknown Title",
@@ -126,6 +127,10 @@ def _scrape_job_details_from_page(page, job_id: str) -> Dict[str, Any]:
             "job_url": page.url,
             "easy_apply": True,
             "scraped_at": datetime.now().isoformat(),
+            "good_fit": False,  # Don't mark as good fit if we couldn't scrape details
+            "fit_score": 0.0,
+            "ai_enriched_at": None,
+            "processed": False
         }
 
 
@@ -424,15 +429,22 @@ def apply_to_job_by_url(
                 # Update is_applied in database
                 try:
                     update_is_applied(job_id, is_applied=True)
-                    log.info(f"Marked job {job_id} as applied in database")
+                    log.info(f"✓ Marked job {job_id} as applied in database")
                 except Exception as e:
-                    log.warn(f"Could not update is_applied: {e}")
+                    log_error(f"✗ CRITICAL: Could not update is_applied for job {job_id}: {e}", screenshot=False)
             else:
                 log_success(
                     "Dry-run completed successfully",
                     details="Application filled but not submitted (dry-run mode)",
                     screenshot=False
                 )
+                # Update is_applied to True anyway if dry-run succeeded (for testing)
+                if allow_submit == False:
+                    try:
+                        update_is_applied(job_id, is_applied=True)
+                        log.info(f"✓ Marked job {job_id} as applied in database (dry-run success)")
+                    except Exception as e:
+                        log_error(f"✗ Could not update is_applied for job {job_id}: {e}", screenshot=False)
         else:
             log_error(
                 "Application failed",
@@ -440,6 +452,12 @@ def apply_to_job_by_url(
                 screenshot=True,
                 screenshot_name="application_failed"
             )
+            # Even if application failed, mark as applied to avoid retrying
+            try:
+                update_is_applied(job_id, is_applied=True)
+                log.info(f"✓ Marked job {job_id} as applied (failed attempt - won't retry)")
+            except Exception as e:
+                log_error(f"✗ Could not update is_applied for job {job_id}: {e}", screenshot=False)
         
         log_section_end("One-off Application", "✅" if apply_result.get("success") else "❌")
         page.close()

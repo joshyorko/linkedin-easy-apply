@@ -73,7 +73,6 @@
             <div class="menu-section">
                 <div class="section-title">[ APPLICATION ]</div>
                 <button class="retro-btn" onclick="showApplyMenu()">✉️ APPLY TO JOBS</button>
-                <button class="retro-btn" onclick="showApplyByUrlForm()">🔗 APPLY BY URL</button>
                 <button class="retro-btn" onclick="checkReadyJobs()">✅ CHECK READY</button>
                 <button class="retro-btn" onclick="viewApplicationHistory()">📊 HISTORY</button>
             </div>
@@ -81,6 +80,24 @@
                 <div class="section-title">[ PROFILE & LOGS ]</div>
                 <button class="retro-btn" onclick="viewProfile()">👤 PROFILE</button>
                 <button class="retro-btn" onclick="viewLogs()">📜 VIEW LOGS</button>
+            </div>
+        </div>
+
+        <!-- Action Status Panel -->
+        <div class="terminal-panel operations-panel">
+            <div class="panel-header">
+                <span class="panel-title">▶ ACTION STATUS</span>
+                <button class="btn-clear" onclick="clearOperations()">CLEAR</button>
+            </div>
+            <div class="operations-body">
+                <div class="operations-column">
+                    <div class="operations-heading">LIVE OPERATIONS</div>
+                    <div class="operations-list operations-live empty" id="operations-live">No active operations</div>
+                </div>
+                <div class="operations-column">
+                    <div class="operations-heading">RECENT RUNS</div>
+                    <div class="operations-list operations-recent empty" id="operations-recent">Loading recent runs...</div>
+                </div>
             </div>
         </div>
 
@@ -136,5 +153,6 @@
     </div>
 
     <script src="app.js"></script>
+    <div id="toast-container" role="status" aria-live="polite"></div>
 </body>
 </html>
