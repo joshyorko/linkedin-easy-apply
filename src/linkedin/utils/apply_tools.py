@@ -73,7 +73,6 @@ STATE_ABBREV_TO_NAME: Dict[str, str] = {
 STATE_NAME_TO_ABBREV: Dict[str, str] = {v.lower(): k for k, v in STATE_ABBREV_TO_NAME.items()}
 
 LOCATION_PENALTY_KEYWORDS = (
-    "county",
     "historic",
     "district",
     "metropolitan",
@@ -130,35 +129,38 @@ def _desired_location_strings(context: Dict[str, Optional[str]]) -> List[str]:
     country = (context.get("country") or "").strip()
 
     strings: List[str] = []
-    if city and state_abbrev:
-        strings.append(f"{city}, {state_abbrev}")
-    if city and state_full:
-        strings.append(f"{city}, {state_full}")
-    if city and state_full and country:
-        strings.append(f"{city}, {state_full}, {country}")
-    if city and state_abbrev and country:
-        strings.append(f"{city}, {state_abbrev}, {country}")
-    if city and country and country.lower() == "united states":
-        strings.append(f"{city}, {state_full}, United States")
-        strings.append(f"{city}, {state_abbrev}, United States")
-    if city and not strings:
-        strings.append(city)
-    if state_full and not city:
-        strings.append(state_full)
-    if state_abbrev and not city:
-        strings.append(state_abbrev)
-    deduped: List[str] = []
     seen: Set[str] = set()
-    for s in strings:
-        s_clean = s.strip()
-        if not s_clean:
-            continue
-        key = s_clean.lower()
+
+    def _add(value: Optional[str]) -> None:
+        value_clean = (value or "").strip()
+        if not value_clean:
+            return
+        key = value_clean.lower()
         if key in seen:
-            continue
+            return
         seen.add(key)
-        deduped.append(s_clean)
-    return deduped
+        strings.append(value_clean)
+
+    if city and state_full and country:
+        _add(f"{city}, {state_full}, {country}")
+    if city and state_full:
+        _add(f"{city}, {state_full}")
+    if city and country:
+        _add(f"{city}, {country}")
+    if city and state_abbrev and country:
+        _add(f"{city}, {state_abbrev}, {country}")
+    if city and state_abbrev:
+        _add(f"{city}, {state_abbrev}")
+    if city:
+        _add(city)
+    if not city and state_full:
+        _add(state_full)
+    if not city and state_abbrev:
+        _add(state_abbrev)
+    if country and not city:
+        _add(country)
+
+    return strings
 
 def _ensure_logged_in(page) -> None:
     """Best-effort login using environment credentials and persistent context."""
@@ -240,6 +242,10 @@ def _prepare_location_context(target_text: str, profile: Dict[str, Any]) -> Dict
                 state_full = state_raw
 
     country = (info.get("country") or "").strip()
+    if country:
+        country_normalized = country.lower()
+        if country_normalized in {"us", "usa", "u.s.", "u.s", "u.s.a.", "united states of america", "united states"}:
+            country = "United States"
     if not country and state_abbrev in STATE_ABBREV_TO_NAME:
         country = "United States"
 
@@ -961,30 +967,54 @@ def _fill_easy_apply_dialog(page, dlg, profile: Dict[str, Any], answers: Dict[st
 
                 elif category == "text_input":
                     if location_field:
-                        location_candidates: List[str] = []
-                        if profile.get("location"):
-                            location_candidates.append(profile.get("location"))
-                        city = profile.get("address_city")
-                        state = profile.get("address_state")
-                        country = profile.get("address_country")
-                        if city and state:
-                            location_candidates.append(f"{city}, {state}")
-                        if city and country and not state:
-                            location_candidates.append(f"{city}, {country}")
+                        context_for_location = _prepare_location_context(profile.get("location") or "", profile)
+                        location_candidates: List[str] = list(_desired_location_strings(context_for_location))
+                        seen_candidates: Set[str] = {c.lower() for c in location_candidates}
+
+                        def _add_location_candidate(value: Optional[str]) -> None:
+                            value_clean = (value or "").strip()
+                            if not value_clean:
+                                return
+                            key_local = value_clean.lower()
+                            if key_local in seen_candidates:
+                                return
+                            seen_candidates.add(key_local)
+                            location_candidates.append(value_clean)
+
+                        _add_location_candidate(profile.get("location"))
+
+                        city = context_for_location.get("city")
+                        state_full = context_for_location.get("state_full")
+                        state_abbrev = context_for_location.get("state_abbrev")
+                        country = context_for_location.get("country") or profile.get("address_country")
+
+                        if city and state_full and country:
+                            _add_location_candidate(f"{city}, {state_full}, {country}")
+                        if city and country:
+                            _add_location_candidate(f"{city}, {country}")
+                        if city and state_abbrev and country:
+                            _add_location_candidate(f"{city}, {state_abbrev}, {country}")
+                        if city and state_abbrev:
+                            _add_location_candidate(f"{city}, {state_abbrev}")
                         if city:
-                            location_candidates.append(city)
-                        if state:
-                            location_candidates.append(state)
+                            _add_location_candidate(city)
+                        if state_full:
+                            _add_location_candidate(state_full)
+                        if state_abbrev:
+                            _add_location_candidate(state_abbrev)
+                        if country:
+                            _add_location_candidate(country)
+
                         filled_location = False
-                        seen_candidates: Set[str] = set()
+                        attempted_candidates: Set[str] = set()
                         for candidate in location_candidates:
                             candidate_clean = (candidate or "").strip()
                             if not candidate_clean:
                                 continue
                             key = candidate_clean.lower()
-                            if key in seen_candidates:
+                            if key in attempted_candidates:
                                 continue
-                            seen_candidates.add(key)
+                            attempted_candidates.add(key)
                             if _fill_location_typeahead(page, dlg, el, candidate_clean, profile):
                                 summary["filled"] += 1
                                 filled_location = True

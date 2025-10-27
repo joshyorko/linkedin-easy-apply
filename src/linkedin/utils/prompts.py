@@ -212,9 +212,27 @@ Experience Questions ("How many years with X?"):
 - Technology NOT in skills → Answer "1" (minimum viable experience - NEVER answer "0")
 - Never leave blank - always provide a number
 
-Yes/No Questions:
-- Work authorization (US location) → "Yes"
-- Sponsorship needed (US citizen) → "No"
+**Work Authorization & Visa Sponsorship Questions (CRITICAL):**
+Questions like:
+- "Are you authorized to work in the US?"
+- "Do you have work authorization?"
+- "Are you legally authorized to work in the United States?"
+→ ALWAYS answer: "Yes" (user is a US Citizen)
+
+Questions like:
+- "Do you require visa sponsorship?"
+- "Will you require sponsorship now or in the future?"
+- "Do you need H1B sponsorship?"
+- "Will you now or in the future require sponsorship for employment visa status?"
+→ ALWAYS answer: "No" (user is a US Citizen - NO sponsorship needed, now or EVER)
+
+**REMEMBER:** US Citizens:
+- ARE authorized to work in the US → "Yes"
+- DO NOT need visa sponsorship now → "No"
+- DO NOT need visa sponsorship in the future → "No"
+- NEVER need H1B, Green Card, or any visa → "No" to ALL sponsorship questions
+
+Other Yes/No Questions:
 - Willing to relocate → "Yes" if remote job, "No" if onsite
 - Available for [reasonable ask] → "Yes"
 - Can you [basic requirement] → "Yes" if profile matches
@@ -295,6 +313,10 @@ def build_form_answering_prompt(
     years_exp = profile.get('years_experience', 'N/A')
     current_company = profile.get('current_company', profile.get('title', 'Self-employed'))
     
+    # Extract work authorization info
+    work_auth = profile.get('work_authorization', 'US Citizen')
+    requires_sponsorship = profile.get('requires_visa_sponsorship', False)
+    
     return f"""<user_profile>
 Name: {profile.get('full_name', 'N/A')}
 Email: {profile.get('email', 'N/A')}
@@ -306,6 +328,15 @@ Current Company: {current_company}
 Years Experience: {years_exp}
 Skills: {skills_str}
 Summary: {profile_summary or 'N/A'}
+
+**WORK AUTHORIZATION STATUS:**
+Work Authorization: {work_auth}
+Requires Visa Sponsorship (now or future): {"No - US Citizen" if not requires_sponsorship else "Yes"}
+
+CRITICAL: This user is a US Citizen and does NOT require visa sponsorship now or in the future.
+- "Are you authorized to work in the US?" → Answer: "Yes"
+- "Do you require sponsorship now or in the future?" → Answer: "No"
+- "Will you need H1B/visa sponsorship?" → Answer: "No"
 </user_profile>
 
 <job_applying_to>
@@ -339,6 +370,13 @@ Rules:
 6. For text fields: Keep it brief and professional (1-2 sentences)
 7. For file uploads: Answer with filename from profile or empty string
 8. For unknown/ambiguous: Make reasonable assumption - DO NOT skip fields
+
+**WORK AUTHORIZATION - MANDATORY REMINDER:**
+User is a US CITIZEN. For ANY question about work authorization, sponsorship, visa needs:
+- "Authorized to work?" → "Yes"
+- "Need sponsorship now?" → "No"
+- "Need sponsorship in future?" → "No"
+- "Require H1B/visa?" → "No"
 
 Your goal: 100% completion rate. The browser automation needs an answer for every field to submit successfully.
 
