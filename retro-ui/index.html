@@ -102,12 +102,16 @@
         </div>
 
         <!-- Console Output (Full Width) -->
-        <div class="terminal-panel console-panel">
+        <div class="terminal-panel console-panel" id="console-panel" data-panel-title="Console Output">
             <div class="panel-header">
                 <span class="panel-title">▶ CONSOLE OUTPUT</span>
-                <button class="btn-clear" onclick="clearConsole()">CLEAR</button>
+                <div class="panel-controls">
+                    <button class="btn-icon" data-panel="console-panel" data-panel-action="collapse" aria-expanded="true" aria-controls="console-output" title="Collapse console" onclick="togglePanelCollapse('console-panel', this)">▾</button>
+                    <button class="btn-icon" data-panel="console-panel" data-panel-action="hide" title="Hide console" onclick="hidePanel('console-panel')">✕</button>
+                    <button class="btn-clear" onclick="clearConsole()">CLEAR</button>
+                </div>
             </div>
-            <div class="console-output" id="console-output">
+            <div class="console-output" id="console-output" data-panel-body="console-panel">
                 <div class="boot-sequence">
                     <div class="boot-line">SYSTEM BOOT INITIATED...</div>
                     <div class="boot-line">LOADING ACTION SERVER MODULE... OK</div>
@@ -121,12 +125,16 @@
         </div>
 
         <!-- Job List Panel -->
-        <div class="jobs-panel" id="jobs-panel" style="display: none;">
+        <div class="jobs-panel" id="jobs-panel" data-panel-title="Job Listings" data-panel-default-hidden="true" style="display: none;">
             <div class="panel-header">
                 <span class="panel-title">▶ JOB LISTINGS</span>
-                <button class="btn-clear" onclick="closeJobsPanel()">CLOSE</button>
+                <div class="panel-controls">
+                    <button class="btn-icon" data-panel="jobs-panel" data-panel-action="collapse" aria-expanded="true" aria-controls="jobs-content" title="Collapse job listings" onclick="togglePanelCollapse('jobs-panel', this)">▾</button>
+                    <button class="btn-icon" data-panel="jobs-panel" data-panel-action="hide" title="Hide job listings" onclick="hidePanel('jobs-panel')">✕</button>
+                    <button class="btn-clear" onclick="closeJobsPanel()">CLOSE</button>
+                </div>
             </div>
-            <div class="jobs-content" id="jobs-content">
+            <div class="jobs-content" id="jobs-content" data-panel-body="jobs-panel">
                 <!-- Jobs will be populated here -->
             </div>
         </div>
@@ -151,6 +159,8 @@
             </div>
         </div>
     </div>
+
+    <div class="hidden-panels-tray" id="hidden-panels-tray" aria-live="polite" aria-label="Hidden panels" style="display: none;"></div>
 
     <script src="app.js"></script>
     <div id="toast-container" role="status" aria-live="polite"></div>

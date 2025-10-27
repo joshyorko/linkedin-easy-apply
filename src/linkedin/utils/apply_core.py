@@ -6,7 +6,7 @@ Both single and batch apply actions use this same core function.
 
 import time
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 def _apply_to_job_core(
@@ -145,41 +145,197 @@ def _apply_to_job_core(
         
         print(f"[Core] Navigation complete: {result['steps_completed']} steps, {result['fields_filled']} fields")
         
-        # Handle submit page - CRITICAL: uncheck "Follow company" and avoid scrolling
+        # Handle submit page - CRITICAL: check required terms, uncheck optional "Follow company"
         if result["reached_submit"]:
             print(f"[Core] On submit page - handling final checkboxes...")
             
             # Refresh dialog reference
             dlg = page.locator('[role="dialog"]').first
             
-            # Uncheck "Follow company" checkbox - click the label (avoids interception)
+            # Find ALL checkboxes and their labels
             try:
-                checked_checkboxes = dlg.locator('input[type="checkbox"]:checked')
-                count = checked_checkboxes.count()
+                all_checkboxes = dlg.locator('input[type="checkbox"]')
+                checkbox_count = all_checkboxes.count()
+                print(f"[Core] Found {checkbox_count} checkbox(es) on submit page")
                 
-                if count > 0:
-                    print(f"[Core] Found {count} checked checkbox(es), unchecking...")
-                    first_checkbox = checked_checkboxes.first
-                    
-                    # Get checkbox ID to find the associated label (labels intercept clicks)
-                    checkbox_id = first_checkbox.get_attribute('id')
-                    if checkbox_id:
-                        # Click the LABEL instead of the checkbox (avoids interception)
-                        label = dlg.locator(f'label[for="{checkbox_id}"]').first
-                        if label.count() > 0:
-                            label.click(timeout=2000)
+                for i in range(checkbox_count):
+                    try:
+                        checkbox = all_checkboxes.nth(i)
+                        checkbox_id = checkbox.get_attribute('id')
+                        is_checked = checkbox.is_checked()
+
+                        # Find associated label or descriptive text
+                        label = None
+                        label_text = ""
+
+                        def _strip(text: Optional[str]) -> str:
+                            return text.strip() if isinstance(text, str) else ""
+
+                        try:
+                            if checkbox_id:
+                                candidate = dlg.locator(f'label[for="{checkbox_id}"]').first
+                                if candidate.count() > 0:
+                                    label = candidate
+                                    label_text = _strip(candidate.inner_text())
+                        except Exception:
+                            pass
+
+                        if not label_text:
+                            try:
+                                parent_label = checkbox.locator('xpath=ancestor::label[1]')
+                                if parent_label.count() > 0:
+                                    label = parent_label.first
+                                    label_text = _strip(parent_label.first.inner_text())
+                            except Exception:
+                                pass
+
+                        if not label_text:
+                            aria_label = checkbox.get_attribute('aria-label')
+                            if aria_label:
+                                label_text = _strip(aria_label)
+
+                        if not label_text:
+                            describedby = checkbox.get_attribute('aria-describedby')
+                            if describedby:
+                                texts = []
+                                for desc_id in describedby.split():
+                                    try:
+                                        desc_el = dlg.locator(f'#{desc_id}').first
+                                        if desc_el.count() > 0:
+                                            texts.append(_strip(desc_el.inner_text()))
+                                    except Exception:
+                                        continue
+                                if texts:
+                                    label_text = " ".join([t for t in texts if t])
+
+                        if not label_text:
+                            try:
+                                # Attempt to read nearby text nodes via JS (limited to 200 chars)
+                                label_text = checkbox.evaluate(
+                                    """
+                                    el => {
+                                        const cleanup = txt => (txt || '').replace(/\s+/g, ' ').trim();
+                                        const pieces = [];
+                                        const label = el.closest('label');
+                                        if (label) {
+                                            const text = cleanup(label.innerText);
+                                            if (text) return text.slice(0, 200);
+                                        }
+                                        if (el.parentElement) {
+                                            const parentText = cleanup(el.parentElement.innerText);
+                                            if (parentText) pieces.push(parentText);
+                                        }
+                                        if (el.previousElementSibling) {
+                                            const prevText = cleanup(el.previousElementSibling.innerText);
+                                            if (prevText) pieces.push(prevText);
+                                        }
+                                        if (el.nextElementSibling) {
+                                            const nextText = cleanup(el.nextElementSibling.innerText);
+                                            if (nextText) pieces.push(nextText);
+                                        }
+                                        return pieces.join(' ').slice(0, 200);
+                                    }
+                                    """
+                                ) or ""
+                            except Exception:
+                                label_text = ""
+
+                        label_text = _strip(label_text)
+                        label_text_lower = label_text.lower()
+
+                        print(f"[Core] Checkbox {i+1}: '{label_text_lower[:80]}...' - Currently {'✓' if is_checked else '☐'}")
+                        
+                        # Determine action based on label text
+                        is_terms = any(keyword in label_text_lower for keyword in [
+                            'terms', 'conditions', 'privacy', 'policy', 'agree', 
+                            'understand', 'consent', 'acknowledge'
+                        ])
+                        is_follow = 'follow' in label_text_lower and 'terms' not in label_text_lower
+                        
+                        if is_terms and not is_checked:
+                            # Must CHECK this (terms/conditions/privacy)
+                            print(f"[Core] ⚠️  REQUIRED checkbox not checked: '{label_text[:50]}' - CHECKING NOW...")
+                            
+                            # Try multiple strategies to check the box
+                            checked_successfully = False
+                            
+                            # Strategy 1: Click the label (most reliable for LinkedIn)
+                            if label and label.count() > 0:
+                                try:
+                                    # Wait for label to be ready
+                                    label.wait_for(state="visible", timeout=2000)
+                                    label.scroll_into_view_if_needed(timeout=2000)
+                                    time.sleep(0.3)
+                                    label.click(timeout=3000, force=False)
+                                    time.sleep(0.3)
+                                    
+                                    # Verify it worked
+                                    if checkbox.is_checked():
+                                        checked_successfully = True
+                                        print(f"[Core] ✅ Checked via label click")
+                                except Exception as e:
+                                    print(f"[Core] Label click failed: {e}")
+                            
+                            # Strategy 2: Direct checkbox click (force)
+                            if not checked_successfully:
+                                try:
+                                    checkbox.scroll_into_view_if_needed(timeout=2000)
+                                    time.sleep(0.2)
+                                    checkbox.click(force=True, timeout=3000)
+                                    time.sleep(0.3)
+                                    
+                                    if checkbox.is_checked():
+                                        checked_successfully = True
+                                        print(f"[Core] ✅ Checked via force click")
+                                except Exception as e:
+                                    print(f"[Core] Force click failed: {e}")
+                            
+                            # Strategy 3: JavaScript click
+                            if not checked_successfully:
+                                try:
+                                    checkbox.evaluate("el => el.click()")
+                                    time.sleep(0.3)
+                                    
+                                    if checkbox.is_checked():
+                                        checked_successfully = True
+                                        print(f"[Core] ✅ Checked via JavaScript")
+                                except Exception as e:
+                                    print(f"[Core] JavaScript click failed: {e}")
+                            
+                            # Strategy 4: Set checked property directly
+                            if not checked_successfully:
+                                try:
+                                    checkbox.evaluate("el => el.checked = true")
+                                    checkbox.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+                                    time.sleep(0.3)
+                                    
+                                    if checkbox.is_checked():
+                                        checked_successfully = True
+                                        print(f"[Core] ✅ Checked via property set")
+                                except Exception as e:
+                                    print(f"[Core] Property set failed: {e}")
+                            
+                            if not checked_successfully:
+                                print(f"[Core] ❌ FAILED to check required checkbox - all strategies exhausted")
+                            
+                        elif is_terms and is_checked:
+                            print(f"[Core] ✓ Required checkbox already checked: '{label_text[:50]}'")
+                            
+                        elif is_follow and is_checked:
+                            # Must UNCHECK this (follow company)
+                            print(f"[Core] Unchecking 'Follow company' checkbox...")
+                            if label and label.count() > 0:
+                                label.click(timeout=3000)
+                            else:
+                                checkbox.click(force=True, timeout=3000)
                             print(f"[Core] ✓ Unchecked 'Follow company' checkbox")
-                        else:
-                            first_checkbox.click(force=True, timeout=1000)
-                            print(f"[Core] ✓ Unchecked checkbox (force click)")
-                    else:
-                        first_checkbox.click(force=True, timeout=1000)
-                        print(f"[Core] ✓ Unchecked checkbox (force click)")
-                else:
-                    print(f"[Core] No checked checkboxes found")
+                            
+                    except Exception as e:
+                        print(f"[Core] Error processing checkbox {i+1}: {e}")
+                        continue
                         
             except Exception as e:
-                print(f"[Core] Checkbox operation failed: {e}")
+                print(f"[Core] Checkbox scan failed: {e}")
             
             # NO SCROLLING on submit page
             

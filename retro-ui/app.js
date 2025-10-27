@@ -19,7 +19,12 @@ const state = {
         activeProfile: 'NONE'
     },
     operations: [],
-    recentRuns: []
+    recentRuns: [],
+    panels: {
+        'console-panel': { title: 'Console Output', collapsed: false, hidden: false, initialized: false },
+        'jobs-panel': { title: 'Job Listings', collapsed: false, hidden: false, initialized: false }
+    },
+    hiddenPanels: []
 };
 
 const OPERATIONS_HISTORY_LIMIT = 8;
@@ -144,6 +149,225 @@ function getToastIcon(type) {
         default:
             return 'ℹ';
     }
+}
+
+// Panel Management
+function getPanelState(panelId) {
+    if (!state.panels[panelId]) {
+        state.panels[panelId] = { title: panelId, collapsed: false, hidden: false, initialized: false };
+    }
+
+    const panel = document.getElementById(panelId);
+    if (!panel) {
+        return state.panels[panelId];
+    }
+
+    const defaultHidden = panel.dataset.panelDefaultHidden === 'true';
+    const derivedTitle = panel.dataset.panelTitle || panel.querySelector('.panel-title')?.textContent?.trim() || panelId;
+
+    state.panels[panelId].title = derivedTitle;
+
+    if (!state.panels[panelId].initialized) {
+        const isCollapsed = panel.classList.contains('panel-collapsed');
+        const isHidden = defaultHidden ? false : (panel.classList.contains('panel-hidden') || panel.style.display === 'none');
+
+        state.panels[panelId].collapsed = isCollapsed;
+        state.panels[panelId].hidden = isHidden;
+        state.panels[panelId].initialized = true;
+    }
+
+    return state.panels[panelId];
+}
+
+function togglePanelCollapse(panelId, control) {
+    const panel = document.getElementById(panelId);
+    if (!panel) {
+        return;
+    }
+
+    const panelState = getPanelState(panelId);
+    if (panelState.hidden) {
+        showPanel(panelId, { preserveCollapse: false });
+    }
+
+    const collapsed = !panelState.collapsed;
+    panelState.collapsed = collapsed;
+    panel.classList.toggle('panel-collapsed', collapsed);
+
+    panel.querySelectorAll('[data-panel-body]').forEach(node => {
+        node.setAttribute('aria-hidden', collapsed.toString());
+    });
+
+    if (control) {
+        control.setAttribute('aria-expanded', (!collapsed).toString());
+        control.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
+        control.textContent = collapsed ? '▸' : '▾';
+    }
+}
+
+function hidePanel(panelId, options = {}) {
+    const panel = document.getElementById(panelId);
+    if (!panel) {
+        return;
+    }
+
+    const { addToTray = true, silent = false } = options;
+    const panelState = getPanelState(panelId);
+
+    if (panelState.hidden) {
+        return;
+    }
+
+    panelState.hidden = true;
+    panelState.collapsed = false;
+
+    panel.classList.add('panel-hidden');
+    panel.classList.remove('panel-collapsed');
+    panel.style.display = 'none';
+    panel.setAttribute('data-hidden', 'true');
+
+    const collapseControl = panel.querySelector('[data-panel-action="collapse"]');
+    if (collapseControl) {
+        collapseControl.setAttribute('aria-expanded', 'true');
+        collapseControl.textContent = '▾';
+        collapseControl.setAttribute('title', 'Collapse panel');
+    }
+
+    if (addToTray) {
+        addHiddenPanelBadge(panelId, panelState.title);
+    } else {
+        removeHiddenPanelBadge(panelId);
+    }
+
+    updateHiddenPanelsTrayVisibility();
+
+    if (!silent && panelId === 'console-panel' && addToTray) {
+        log('info', 'Console output hidden. Restore it via the Hidden Panels tray below.');
+    }
+}
+
+function showPanel(panelId, options = {}) {
+    const panel = document.getElementById(panelId);
+    if (!panel) {
+        return;
+    }
+
+    const panelState = getPanelState(panelId);
+    panelState.hidden = false;
+
+    panel.classList.remove('panel-hidden');
+    panel.removeAttribute('data-hidden');
+    panel.style.display = options.display || 'block';
+
+    if (!options.preserveCollapse) {
+        panel.classList.remove('panel-collapsed');
+        panelState.collapsed = false;
+    }
+
+    const collapseControl = panel.querySelector('[data-panel-action="collapse"]');
+    if (collapseControl) {
+        collapseControl.setAttribute('aria-expanded', 'true');
+        collapseControl.textContent = '▾';
+        collapseControl.setAttribute('title', 'Collapse panel');
+    }
+
+    panel.querySelectorAll('[data-panel-body]').forEach(node => {
+        node.setAttribute('aria-hidden', 'false');
+    });
+
+    removeHiddenPanelBadge(panelId);
+    updateHiddenPanelsTrayVisibility();
+}
+
+function restorePanel(panelId) {
+    showPanel(panelId);
+    const panelState = getPanelState(panelId);
+    if (panelState?.title) {
+        log('info', `${panelState.title} restored.`);
+    }
+}
+
+function addHiddenPanelBadge(panelId, title) {
+    const tray = document.getElementById('hidden-panels-tray');
+    if (!tray) {
+        return;
+    }
+
+    if (!state.hiddenPanels.includes(panelId)) {
+        state.hiddenPanels.push(panelId);
+    }
+
+    let button = tray.querySelector(`[data-restore-panel="${panelId}"]`);
+    if (!button) {
+        button = document.createElement('button');
+        button.className = 'retro-btn btn-small';
+        button.dataset.restorePanel = panelId;
+        button.textContent = `Show ${title}`;
+        button.addEventListener('click', () => restorePanel(panelId));
+        tray.appendChild(button);
+    } else {
+        button.textContent = `Show ${title}`;
+    }
+}
+
+function removeHiddenPanelBadge(panelId) {
+    const tray = document.getElementById('hidden-panels-tray');
+    if (!tray) {
+        return;
+    }
+
+    const index = state.hiddenPanels.indexOf(panelId);
+    if (index !== -1) {
+        state.hiddenPanels.splice(index, 1);
+    }
+
+    const button = tray.querySelector(`[data-restore-panel="${panelId}"]`);
+    if (button) {
+        button.remove();
+    }
+}
+
+function updateHiddenPanelsTrayVisibility() {
+    const tray = document.getElementById('hidden-panels-tray');
+    if (!tray) {
+        return;
+    }
+
+    const hasHiddenPanels = state.hiddenPanels.length > 0;
+    tray.classList.toggle('active', hasHiddenPanels);
+    tray.style.display = hasHiddenPanels ? 'flex' : 'none';
+}
+
+function syncInitialPanelState() {
+    Object.keys(state.panels).forEach(panelId => {
+        const panel = document.getElementById(panelId);
+        if (!panel) {
+            return;
+        }
+
+        const panelState = getPanelState(panelId);
+
+        panel.classList.toggle('panel-collapsed', panelState.collapsed);
+
+        panel.querySelectorAll('[data-panel-body]').forEach(node => {
+            node.setAttribute('aria-hidden', panelState.collapsed.toString());
+        });
+
+        const collapseControl = panel.querySelector('[data-panel-action="collapse"]');
+        if (collapseControl) {
+            collapseControl.setAttribute('aria-expanded', (!panelState.collapsed).toString());
+            collapseControl.textContent = panelState.collapsed ? '▸' : '▾';
+            collapseControl.setAttribute('title', panelState.collapsed ? 'Expand panel' : 'Collapse panel');
+        }
+
+        if (panelState.hidden) {
+            panel.classList.add('panel-hidden');
+            panel.style.display = 'none';
+            addHiddenPanelBadge(panelId, panelState.title);
+        }
+    });
+
+    updateHiddenPanelsTrayVisibility();
 }
 
 // Operation Tracking
@@ -446,6 +670,7 @@ function initializeUI() {
     setInterval(updateTimestamp, 1000);
     renderOperations();
     renderRecentRuns();
+    syncInitialPanelState();
     refreshActionRuns(true);
     log('info', 'UI initialized successfully');
 }
@@ -847,6 +1072,7 @@ async function loadJobsByRunId(runId) {
 
 // Display Jobs
 function displayJobs(jobs) {
+    showPanel('jobs-panel');
     const panel = document.getElementById('jobs-panel');
     const content = document.getElementById('jobs-content');
     
@@ -866,12 +1092,10 @@ function displayJobs(jobs) {
             </div>
         `).join('');
     }
-    
-    panel.style.display = 'block';
 }
 
 function closeJobsPanel() {
-    document.getElementById('jobs-panel').style.display = 'none';
+    hidePanel('jobs-panel', { addToTray: false, silent: true });
 }
 
 // View Job Details
@@ -1470,12 +1694,12 @@ async function checkReadyJobs() {
 
 // Display Ready Jobs in Panel
 function displayReadyJobs(jobs) {
+    showPanel('jobs-panel');
     const jobsPanel = document.getElementById('jobs-panel');
     const jobsContent = document.getElementById('jobs-content');
     
     if (!jobs || jobs.length === 0) {
         jobsContent.innerHTML = '<div class="job-item" style="text-align: center; color: #ffaa00;">NO JOBS READY TO APPLY</div>';
-        jobsPanel.style.display = 'block';
         return;
     }
     
@@ -1517,7 +1741,6 @@ function displayReadyJobs(jobs) {
     });
     
     jobsContent.innerHTML = html;
-    jobsPanel.style.display = 'block';
     log('info', `Displaying ${jobs.length} ready jobs in Job Listings panel below`);
 }
 
