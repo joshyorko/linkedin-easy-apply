@@ -1876,19 +1876,377 @@ async function confirmApply(jobId) {
     }
 }
 
-// View Profile
+// View Profile - Enhanced with edit and switch functionality
 async function viewProfile() {
-    log('info', 'Loading active profile...');
+    log('info', 'Loading profile management...');
     
     try {
-        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile`);
+        // Fetch all profiles and active profile
+        const [profilesResponse, activeResponse] = await Promise.all([
+            fetch(`${CONFIG.PROXY_SERVER_URL}/api/profiles`),
+            fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile`)
+        ]);
         
+        let profiles = [];
+        let activeProfile = null;
+        
+        if (profilesResponse.ok) {
+            const profilesData = await profilesResponse.json();
+            profiles = profilesData.profiles || [];
+        }
+        
+        if (activeResponse.ok) {
+            const activeData = await activeResponse.json();
+            if (activeData.results && activeData.results.length > 0) {
+                activeProfile = activeData.results[0];
+            }
+        }
+        
+        displayProfileManager(profiles, activeProfile);
+        
+    } catch (error) {
+        log('error', `Failed to load profiles: ${error.message}`);
+        openModal('PROFILE', '<div style="text-align: center; color: #ff3333;">FAILED TO LOAD PROFILES</div>');
+    }
+}
+
+function displayProfileManager(profiles, activeProfile) {
+    // Build profile selector dropdown
+    const profileOptions = profiles.map(p => {
+        const isActive = p.is_active === 1 || p.is_active === true;
+        const displayName = `${p.profile_name || p.full_name || 'Unnamed'} ${isActive ? '(ACTIVE)' : ''}`;
+        return `<option value="${p.profile_id}" ${isActive ? 'selected' : ''}>${displayName}</option>`;
+    }).join('');
+    
+    // Parse skills for display
+    let skillsArray = [];
+    if (activeProfile?.skills) {
+        try {
+            skillsArray = typeof activeProfile.skills === 'string' 
+                ? JSON.parse(activeProfile.skills) 
+                : activeProfile.skills;
+        } catch { skillsArray = []; }
+    }
+    const skillsDisplay = Array.isArray(skillsArray) ? skillsArray.join(', ') : '';
+    
+    const profileHtml = `
+        <div class="profile-manager" style="line-height: 1.6;">
+            <!-- Profile Selector -->
+            <div class="profile-selector" style="margin-bottom: 20px; padding: 15px; border: 2px solid #00aaaa; background: rgba(0,170,170,0.1);">
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <label style="color: #00aaaa; font-size: 18px;">SELECT PROFILE:</label>
+                    <select id="profile-selector" class="form-select" style="flex: 1; min-width: 200px;" onchange="loadSelectedProfile(this.value)">
+                        ${profileOptions || '<option value="">No profiles found</option>'}
+                    </select>
+                    <button class="retro-btn btn-small" onclick="switchToSelectedProfile()" style="margin: 0; width: auto;">
+                        ⚡ ACTIVATE
+                    </button>
+                </div>
+                <div style="color: #00aa00; font-size: 14px; margin-top: 8px;">
+                    📊 Total profiles: ${profiles.length} | 
+                    💡 Switch between profiles or edit the current one below
+                </div>
+            </div>
+            
+            ${activeProfile ? `
+            <!-- Profile Edit Form -->
+            <div id="profile-edit-container">
+                <form id="profile-edit-form" onsubmit="saveProfileChanges(event)">
+                    <input type="hidden" id="edit-profile-id" value="${activeProfile.profile_id || ''}">
+                    
+                    <!-- Basic Info Section -->
+                    <div class="profile-section" style="border: 1px solid #00ff00; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #00ff00; margin-bottom: 15px; border-bottom: 1px solid #00ff00; padding-bottom: 5px;">
+                            📋 BASIC INFORMATION
+                        </h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">PROFILE NAME:</label>
+                                <input type="text" id="edit-profile_name" class="form-input" 
+                                    value="${escapeHtml(activeProfile.profile_name || '')}" 
+                                    placeholder="e.g., DevOps Engineer">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">FULL NAME:</label>
+                                <input type="text" id="edit-full_name" class="form-input" 
+                                    value="${escapeHtml(activeProfile.full_name || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">FIRST NAME:</label>
+                                <input type="text" id="edit-first_name" class="form-input" 
+                                    value="${escapeHtml(activeProfile.first_name || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">LAST NAME:</label>
+                                <input type="text" id="edit-last_name" class="form-input" 
+                                    value="${escapeHtml(activeProfile.last_name || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">TITLE:</label>
+                                <input type="text" id="edit-title" class="form-input" 
+                                    value="${escapeHtml(activeProfile.title || '')}"
+                                    placeholder="e.g., Senior Software Engineer">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">YEARS OF EXPERIENCE:</label>
+                                <input type="number" id="edit-years_of_experience" class="form-input" 
+                                    value="${activeProfile.years_of_experience || ''}" min="0" max="50">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Contact Info Section -->
+                    <div class="profile-section" style="border: 1px solid #00aaff; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #00aaff; margin-bottom: 15px; border-bottom: 1px solid #00aaff; padding-bottom: 5px;">
+                            📞 CONTACT INFORMATION
+                        </h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">EMAIL:</label>
+                                <input type="email" id="edit-email" class="form-input" 
+                                    value="${escapeHtml(activeProfile.email || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">PHONE:</label>
+                                <input type="tel" id="edit-phone" class="form-input" 
+                                    value="${escapeHtml(activeProfile.phone || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">LINKEDIN:</label>
+                                <input type="url" id="edit-linkedin_url" class="form-input" 
+                                    value="${escapeHtml(activeProfile.linkedin_url || '')}"
+                                    placeholder="https://linkedin.com/in/...">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">GITHUB:</label>
+                                <input type="url" id="edit-github" class="form-input" 
+                                    value="${escapeHtml(activeProfile.github || '')}"
+                                    placeholder="https://github.com/...">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">WEBSITE:</label>
+                                <input type="url" id="edit-website" class="form-input" 
+                                    value="${escapeHtml(activeProfile.website || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">PORTFOLIO:</label>
+                                <input type="url" id="edit-portfolio_url" class="form-input" 
+                                    value="${escapeHtml(activeProfile.portfolio_url || '')}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Address Section -->
+                    <div class="profile-section" style="border: 1px solid #ffaa00; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #ffaa00; margin-bottom: 15px; border-bottom: 1px solid #ffaa00; padding-bottom: 5px;">
+                            📍 ADDRESS
+                        </h3>
+                        
+                        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">STREET:</label>
+                                <input type="text" id="edit-address_street" class="form-input" 
+                                    value="${escapeHtml(activeProfile.address_street || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">CITY:</label>
+                                <input type="text" id="edit-address_city" class="form-input" 
+                                    value="${escapeHtml(activeProfile.address_city || '')}">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">STATE:</label>
+                                <input type="text" id="edit-address_state" class="form-input" 
+                                    value="${escapeHtml(activeProfile.address_state || '')}" maxlength="2" 
+                                    placeholder="e.g., TX">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">ZIP:</label>
+                                <input type="text" id="edit-address_zip" class="form-input" 
+                                    value="${escapeHtml(activeProfile.address_zip || '')}">
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label class="form-label" style="font-size: 16px;">LOCATION (Legacy):</label>
+                            <input type="text" id="edit-location" class="form-input" 
+                                value="${escapeHtml(activeProfile.location || '')}"
+                                placeholder="e.g., Austin, TX">
+                        </div>
+                    </div>
+                    
+                    <!-- Work Authorization Section -->
+                    <div class="profile-section" style="border: 1px solid #ff6666; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #ff6666; margin-bottom: 15px; border-bottom: 1px solid #ff6666; padding-bottom: 5px;">
+                            🛂 WORK AUTHORIZATION & EMPLOYMENT
+                        </h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">WORK AUTHORIZATION:</label>
+                                <select id="edit-work_authorization" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    <option value="US Citizen" ${activeProfile.work_authorization === 'US Citizen' ? 'selected' : ''}>US Citizen</option>
+                                    <option value="Green Card" ${activeProfile.work_authorization === 'Green Card' ? 'selected' : ''}>Green Card / Permanent Resident</option>
+                                    <option value="H1B" ${activeProfile.work_authorization === 'H1B' ? 'selected' : ''}>H1B Visa</option>
+                                    <option value="L1" ${activeProfile.work_authorization === 'L1' ? 'selected' : ''}>L1 Visa</option>
+                                    <option value="OPT" ${activeProfile.work_authorization === 'OPT' ? 'selected' : ''}>OPT/CPT</option>
+                                    <option value="TN" ${activeProfile.work_authorization === 'TN' ? 'selected' : ''}>TN Visa</option>
+                                    <option value="Other" ${activeProfile.work_authorization === 'Other' ? 'selected' : ''}>Other Work Authorization</option>
+                                    <option value="Requires Sponsorship" ${activeProfile.work_authorization === 'Requires Sponsorship' ? 'selected' : ''}>Requires Sponsorship</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">REQUIRES VISA SPONSORSHIP:</label>
+                                <select id="edit-requires_visa_sponsorship" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    <option value="0" ${activeProfile.requires_visa_sponsorship === 0 || activeProfile.requires_visa_sponsorship === false ? 'selected' : ''}>No</option>
+                                    <option value="1" ${activeProfile.requires_visa_sponsorship === 1 || activeProfile.requires_visa_sponsorship === true ? 'selected' : ''}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">SECURITY CLEARANCE:</label>
+                                <select id="edit-security_clearance" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    <option value="None" ${activeProfile.security_clearance === 'None' ? 'selected' : ''}>None</option>
+                                    <option value="Public Trust" ${activeProfile.security_clearance === 'Public Trust' ? 'selected' : ''}>Public Trust</option>
+                                    <option value="Secret" ${activeProfile.security_clearance === 'Secret' ? 'selected' : ''}>Secret</option>
+                                    <option value="Top Secret" ${activeProfile.security_clearance === 'Top Secret' ? 'selected' : ''}>Top Secret</option>
+                                    <option value="TS/SCI" ${activeProfile.security_clearance === 'TS/SCI' ? 'selected' : ''}>TS/SCI</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">EARLIEST START DATE:</label>
+                                <select id="edit-earliest_start_date" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    <option value="Immediately" ${activeProfile.earliest_start_date === 'Immediately' ? 'selected' : ''}>Immediately</option>
+                                    <option value="2 weeks" ${activeProfile.earliest_start_date === '2 weeks' ? 'selected' : ''}>2 Weeks</option>
+                                    <option value="1 month" ${activeProfile.earliest_start_date === '1 month' ? 'selected' : ''}>1 Month</option>
+                                    <option value="2 months" ${activeProfile.earliest_start_date === '2 months' ? 'selected' : ''}>2 Months</option>
+                                    <option value="3+ months" ${activeProfile.earliest_start_date === '3+ months' ? 'selected' : ''}>3+ Months</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Salary & Preferences Section -->
+                    <div class="profile-section" style="border: 1px solid #00ff00; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #00ff00; margin-bottom: 15px; border-bottom: 1px solid #00ff00; padding-bottom: 5px;">
+                            💰 SALARY & PREFERENCES
+                        </h3>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">SALARY MIN ($):</label>
+                                <input type="number" id="edit-salary_min" class="form-input" 
+                                    value="${activeProfile.salary_min || ''}" min="0" step="1000">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">SALARY MAX ($):</label>
+                                <input type="number" id="edit-salary_max" class="form-input" 
+                                    value="${activeProfile.salary_max || ''}" min="0" step="1000">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label class="form-label" style="font-size: 16px;">WILLING TO RELOCATE:</label>
+                                <select id="edit-willing_to_relocate" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    <option value="0" ${activeProfile.willing_to_relocate === 0 || activeProfile.willing_to_relocate === false ? 'selected' : ''}>No</option>
+                                    <option value="1" ${activeProfile.willing_to_relocate === 1 || activeProfile.willing_to_relocate === true ? 'selected' : ''}>Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label class="form-label" style="font-size: 16px;">REMOTE PREFERENCE:</label>
+                            <select id="edit-remote_preference" class="form-select">
+                                <option value="">-- Select --</option>
+                                <option value="Remote Only" ${activeProfile.remote_preference === 'Remote Only' ? 'selected' : ''}>Remote Only</option>
+                                <option value="Remote Preferred" ${activeProfile.remote_preference === 'Remote Preferred' ? 'selected' : ''}>Remote Preferred</option>
+                                <option value="Hybrid" ${activeProfile.remote_preference === 'Hybrid' ? 'selected' : ''}>Hybrid</option>
+                                <option value="On-site" ${activeProfile.remote_preference === 'On-site' ? 'selected' : ''}>On-site</option>
+                                <option value="Flexible" ${activeProfile.remote_preference === 'Flexible' ? 'selected' : ''}>Flexible</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Skills Section -->
+                    <div class="profile-section" style="border: 1px solid #aa66ff; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #aa66ff; margin-bottom: 15px; border-bottom: 1px solid #aa66ff; padding-bottom: 5px;">
+                            🔧 SKILLS
+                        </h3>
+                        
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label class="form-label" style="font-size: 16px;">SKILLS (comma-separated):</label>
+                            <textarea id="edit-skills" class="form-textarea" rows="4" 
+                                placeholder="Python, JavaScript, Docker, Kubernetes, AWS...">${escapeHtml(skillsDisplay)}</textarea>
+                            <div style="color: #00aa00; font-size: 14px; margin-top: 5px;">
+                                💡 Edit skills to improve AI job matching. Separate with commas.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Summary Section -->
+                    <div class="profile-section" style="border: 1px solid #00aaaa; padding: 15px; margin-bottom: 15px;">
+                        <h3 style="color: #00aaaa; margin-bottom: 15px; border-bottom: 1px solid #00aaaa; padding-bottom: 5px;">
+                            📝 SUMMARY
+                        </h3>
+                        
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label class="form-label" style="font-size: 16px;">PROFESSIONAL SUMMARY:</label>
+                            <textarea id="edit-summary" class="form-textarea" rows="4" 
+                                placeholder="Brief professional summary...">${escapeHtml(activeProfile.summary || '')}</textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- Profile Stats (Read-only) -->
+                    <div class="profile-section" style="border: 1px solid #666; padding: 15px; margin-bottom: 15px; background: rgba(100,100,100,0.1);">
+                        <h3 style="color: #888; margin-bottom: 15px;">📊 PROFILE STATISTICS (Read-only)</h3>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; color: #aaa;">
+                            <div><strong>Applications:</strong> ${activeProfile.applications_count || 0}</div>
+                            <div><strong>Success Rate:</strong> ${activeProfile.success_rate ? (activeProfile.success_rate * 100).toFixed(1) + '%' : 'N/A'}</div>
+                            <div><strong>Created:</strong> ${activeProfile.created_at ? new Date(activeProfile.created_at).toLocaleDateString() : 'N/A'}</div>
+                            <div><strong>Last Used:</strong> ${activeProfile.last_used_at ? new Date(activeProfile.last_used_at).toLocaleDateString() : 'Never'}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div style="display: flex; gap: 15px; margin-top: 20px;">
+                        <button type="submit" class="retro-btn" style="flex: 2; background: rgba(0,255,0,0.1);">
+                            💾 SAVE CHANGES
+                        </button>
+                        <button type="button" class="retro-btn" style="flex: 1;" onclick="viewProfile()">
+                            🔄 REFRESH
+                        </button>
+                        <button type="button" class="retro-btn" style="flex: 1;" onclick="closeModal()">
+                            ❌ CLOSE
+                        </button>
+                    </div>
+                </form>
+            </div>
+            ` : `
+            <div style="text-align: center; padding: 40px; color: #ff3333;">
+                <h3>NO ACTIVE PROFILE FOUND</h3>
+                <p style="margin: 20px 0; color: #00aaaa;">
+                    Upload a resume to create your first profile, or select an existing profile above.
+                </p>
+            </div>
+            `}
+        </div>
+    `;
+    
+    openModal('👤 PROFILE MANAGER', profileHtml);
+}
+
+// Load a specific profile into the form
+async function loadSelectedProfile(profileId) {
+    if (!profileId) return;
+    
+    try {
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile/${profileId}`);
         if (response.ok) {
             const data = await response.json();
-            if (data.results.length > 0) {
-                displayProfile(data.results[0]);
-            } else {
-                openModal('PROFILE', '<div style="text-align: center; color: #ff3333;">NO ACTIVE PROFILE FOUND</div>');
+            if (data.success && data.profile) {
+                populateProfileForm(data.profile);
+                log('info', `Loaded profile: ${data.profile.profile_name || data.profile.full_name}`);
             }
         }
     } catch (error) {
@@ -1896,32 +2254,193 @@ async function viewProfile() {
     }
 }
 
-function displayProfile(profile) {
-    const profileHtml = `
-        <div style="line-height: 1.6;">
-            <h2 style="color: #00ff00; margin-bottom: 20px;">${profile.profile_name || 'User Profile'}</h2>
+// Populate form with profile data
+function populateProfileForm(profile) {
+    const fields = [
+        'profile_name', 'full_name', 'first_name', 'last_name', 'title', 'email', 'phone',
+        'linkedin_url', 'github', 'website', 'portfolio_url', 'location',
+        'address_street', 'address_city', 'address_state', 'address_zip',
+        'work_authorization', 'requires_visa_sponsorship', 'security_clearance', 'earliest_start_date',
+        'salary_min', 'salary_max', 'willing_to_relocate', 'remote_preference', 'years_of_experience',
+        'summary'
+    ];
+    
+    // Update hidden profile_id
+    const profileIdField = document.getElementById('edit-profile-id');
+    if (profileIdField) profileIdField.value = profile.profile_id || '';
+    
+    // Update all fields
+    fields.forEach(field => {
+        const element = document.getElementById(`edit-${field}`);
+        if (element) {
+            const value = profile[field];
+            if (element.tagName === 'SELECT') {
+                element.value = value !== null && value !== undefined ? String(value) : '';
+            } else {
+                element.value = value || '';
+            }
+        }
+    });
+    
+    // Handle skills separately (convert array to comma-separated)
+    const skillsField = document.getElementById('edit-skills');
+    if (skillsField && profile.skills) {
+        let skillsArray = profile.skills;
+        if (typeof skillsArray === 'string') {
+            try { skillsArray = JSON.parse(skillsArray); } catch { skillsArray = []; }
+        }
+        skillsField.value = Array.isArray(skillsArray) ? skillsArray.join(', ') : '';
+    }
+}
+
+// Switch to selected profile
+async function switchToSelectedProfile() {
+    const selector = document.getElementById('profile-selector');
+    if (!selector || !selector.value) {
+        showToast('Please select a profile first', 'warning');
+        return;
+    }
+    
+    const profileId = selector.value;
+    const pendingToast = showToast('Activating profile...', 'pending', { sticky: true });
+    
+    try {
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile/${profileId}/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+            updateToast(pendingToast, {
+                message: 'Profile activated successfully!',
+                type: 'success',
+                autoClose: 3000
+            });
+            log('success', 'Profile activated successfully');
             
-            <div style="margin-bottom: 15px;">
-                <strong style="color: #00aaaa;">NAME:</strong> ${profile.full_name || 'N/A'}<br>
-                <strong style="color: #00aaaa;">EMAIL:</strong> ${profile.email || 'N/A'}<br>
-                <strong style="color: #00aaaa;">PHONE:</strong> ${profile.phone || 'N/A'}<br>
-                <strong style="color: #00aaaa;">LOCATION:</strong> ${profile.location || 'N/A'}<br>
-            </div>
+            // Refresh stats and reload profile manager
+            await refreshStats();
+            await viewProfile();
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to activate profile');
+        }
+    } catch (error) {
+        updateToast(pendingToast, {
+            message: `Failed to activate: ${error.message}`,
+            type: 'error',
+            autoClose: 5000
+        });
+        log('error', `Profile activation failed: ${error.message}`);
+    }
+}
+
+// Save profile changes
+async function saveProfileChanges(event) {
+    event.preventDefault();
+    
+    const profileId = document.getElementById('edit-profile-id').value;
+    if (!profileId) {
+        showToast('No profile selected', 'error');
+        return;
+    }
+    
+    const pendingToast = showToast('Saving profile changes...', 'pending', { sticky: true });
+    
+    // Collect all form values
+    const formData = {
+        profile_name: document.getElementById('edit-profile_name')?.value || null,
+        full_name: document.getElementById('edit-full_name')?.value || null,
+        first_name: document.getElementById('edit-first_name')?.value || null,
+        last_name: document.getElementById('edit-last_name')?.value || null,
+        title: document.getElementById('edit-title')?.value || null,
+        email: document.getElementById('edit-email')?.value || null,
+        phone: document.getElementById('edit-phone')?.value || null,
+        linkedin_url: document.getElementById('edit-linkedin_url')?.value || null,
+        github: document.getElementById('edit-github')?.value || null,
+        website: document.getElementById('edit-website')?.value || null,
+        portfolio_url: document.getElementById('edit-portfolio_url')?.value || null,
+        location: document.getElementById('edit-location')?.value || null,
+        address_street: document.getElementById('edit-address_street')?.value || null,
+        address_city: document.getElementById('edit-address_city')?.value || null,
+        address_state: document.getElementById('edit-address_state')?.value || null,
+        address_zip: document.getElementById('edit-address_zip')?.value || null,
+        work_authorization: document.getElementById('edit-work_authorization')?.value || null,
+        security_clearance: document.getElementById('edit-security_clearance')?.value || null,
+        earliest_start_date: document.getElementById('edit-earliest_start_date')?.value || null,
+        remote_preference: document.getElementById('edit-remote_preference')?.value || null,
+        summary: document.getElementById('edit-summary')?.value || null
+    };
+    
+    // Handle numeric fields
+    const salaryMin = document.getElementById('edit-salary_min')?.value;
+    const salaryMax = document.getElementById('edit-salary_max')?.value;
+    const yearsExp = document.getElementById('edit-years_of_experience')?.value;
+    
+    if (salaryMin) formData.salary_min = parseInt(salaryMin, 10);
+    if (salaryMax) formData.salary_max = parseInt(salaryMax, 10);
+    if (yearsExp) formData.years_of_experience = parseInt(yearsExp, 10);
+    
+    // Handle boolean fields
+    const sponsorship = document.getElementById('edit-requires_visa_sponsorship')?.value;
+    const relocate = document.getElementById('edit-willing_to_relocate')?.value;
+    
+    if (sponsorship !== '') formData.requires_visa_sponsorship = parseInt(sponsorship, 10);
+    if (relocate !== '') formData.willing_to_relocate = parseInt(relocate, 10);
+    
+    // Handle skills (convert comma-separated to JSON array)
+    const skillsText = document.getElementById('edit-skills')?.value;
+    if (skillsText) {
+        const skillsArray = skillsText.split(',').map(s => s.trim()).filter(s => s);
+        formData.skills = JSON.stringify(skillsArray);
+    }
+    
+    // Remove null/undefined values
+    const cleanedData = {};
+    for (const [key, value] of Object.entries(formData)) {
+        if (value !== null && value !== undefined && value !== '') {
+            cleanedData[key] = value;
+        }
+    }
+    
+    try {
+        const response = await fetch(`${CONFIG.PROXY_SERVER_URL}/api/profile/${profileId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cleanedData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            updateToast(pendingToast, {
+                message: `Profile saved! Updated ${result.updatedFields?.length || 0} fields`,
+                type: 'success',
+                autoClose: 3000
+            });
+            log('success', `Profile updated: ${result.updatedFields?.join(', ')}`);
             
-            <div style="margin-bottom: 15px;">
-                <strong style="color: #00aaaa;">WORK AUTHORIZATION:</strong> ${profile.work_authorization || 'N/A'}<br>
-                <strong style="color: #00aaaa;">EXPERIENCE:</strong> ${profile.years_of_experience || 'N/A'} years<br>
-                <strong style="color: #00aaaa;">SALARY RANGE:</strong> $${profile.salary_min || 'N/A'} - $${profile.salary_max || 'N/A'}<br>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <strong style="color: #00aaaa;">APPLICATIONS:</strong> ${profile.applications_count || 0}<br>
-                <strong style="color: #00aaaa;">SUCCESS RATE:</strong> ${profile.success_rate ? (profile.success_rate * 100).toFixed(1) + '%' : 'N/A'}<br>
-                <strong style="color: #00aaaa;">LAST USED:</strong> ${profile.last_used_at ? new Date(profile.last_used_at).toLocaleString() : 'Never'}<br>
-            </div>
-        </div>
-    `;
-    openModal('ACTIVE PROFILE', profileHtml);
+            // Refresh stats
+            await refreshStats();
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to save profile');
+        }
+    } catch (error) {
+        updateToast(pendingToast, {
+            message: `Save failed: ${error.message}`,
+            type: 'error',
+            autoClose: 5000
+        });
+        log('error', `Profile save failed: ${error.message}`);
+    }
+}
+
+// HTML escape helper
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // View Application History
@@ -2071,14 +2590,30 @@ function openLogFile(runId) {
 }
 
 // Modal Functions
-function openModal(title, content) {
+function openModal(title, content, options = {}) {
+    const modalContent = document.querySelector('.modal-content');
+    const modalBody = document.getElementById('modal-body');
+    
     document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = content;
+    modalBody.innerHTML = content;
     document.getElementById('modal').style.display = 'flex';
+    
+    // Handle large modal for profile manager
+    if (options.large || content.includes('profile-manager')) {
+        modalContent.style.maxWidth = '1000px';
+        modalContent.style.maxHeight = '90vh';
+    } else {
+        modalContent.style.maxWidth = '800px';
+        modalContent.style.maxHeight = '80vh';
+    }
 }
 
 function closeModal() {
     document.getElementById('modal').style.display = 'none';
+    // Reset modal size
+    const modalContent = document.querySelector('.modal-content');
+    modalContent.style.maxWidth = '800px';
+    modalContent.style.maxHeight = '80vh';
 }
 
 function applyToSelectedJobs() {

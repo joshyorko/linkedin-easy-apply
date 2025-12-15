@@ -410,16 +410,191 @@ app.get('/api/profile', async (req, res) => {
     const query = dbType === 'postgres'
         ? 'SELECT * FROM user_profiles WHERE is_active = true'
         : 'SELECT * FROM user_profiles WHERE is_active = 1';
-    
+
     try {
         const rows = await executeQuery(query);
-        if (rows.length === 0) {
-            return res.status(404).json({ error: 'No active profile found' });
-        }
-        res.json(rows[0]);
+        // Always return { results: [...] }
+        res.json({ results: rows });
     } catch (err) {
         console.error('❌ Profile error:', err.message);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Get all profiles (for profile selector)
+app.get('/api/profiles', async (req, res) => {
+    const limit = req.query.limit || 50;
+    const query = `
+        SELECT 
+            profile_id, profile_name, profile_type, is_active,
+            full_name, email, phone, phone_country,
+            linkedin_url, github, website, portfolio_url,
+            location, title, summary, skills,
+            first_name, last_name,
+            address_street, address_city, address_state, address_zip, address_country,
+            work_authorization, requires_visa_sponsorship, security_clearance,
+            veteran_status, disability_status, gender, race_ethnicity,
+            salary_min, salary_max, salary_currency, earliest_start_date,
+            willing_to_relocate, remote_preference, years_of_experience,
+            applications_count, success_rate,
+            source_file, source_type, version,
+            created_at, updated_at, last_used_at
+        FROM user_profiles 
+        ORDER BY is_active DESC, updated_at DESC
+        LIMIT ${dbType === 'postgres' ? '$1' : '?'}
+    `;
+
+    try {
+        const rows = await executeQuery(query, [limit]);
+        res.json({ success: true, profiles: rows });
+    } catch (err) {
+        console.error('❌ Profiles list error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get single profile by ID
+app.get('/api/profile/:profileId', async (req, res) => {
+    const { profileId } = req.params;
+    const query = dbType === 'postgres'
+        ? 'SELECT * FROM user_profiles WHERE profile_id = $1'
+        : 'SELECT * FROM user_profiles WHERE profile_id = ?';
+
+    try {
+        const rows = await executeQuery(query, [profileId]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+        res.json({ success: true, profile: rows[0] });
+    } catch (err) {
+        console.error('❌ Profile fetch error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Set active profile
+app.post('/api/profile/:profileId/activate', async (req, res) => {
+    const { profileId } = req.params;
+    
+    // Need writable database connection for this operation
+    // Re-initialize with write access if needed
+    if (dbType === 'sqlite') {
+        const sqlite3 = require('sqlite3').verbose();
+        const DB_PATH = process.env.DB_PATH || require('path').join(__dirname, '..', 'src', 'linkedin_jobs.sqlite');
+        const writeDb = new sqlite3.Database(DB_PATH);
+        
+        try {
+            await new Promise((resolve, reject) => {
+                writeDb.run('UPDATE user_profiles SET is_active = 0', (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+            
+            await new Promise((resolve, reject) => {
+                writeDb.run('UPDATE user_profiles SET is_active = 1, updated_at = datetime("now") WHERE profile_id = ?', [profileId], function(err) {
+                    if (err) reject(err);
+                    else if (this.changes === 0) reject(new Error('Profile not found'));
+                    else resolve();
+                });
+            });
+            
+            writeDb.close();
+            res.json({ success: true, message: 'Profile activated successfully' });
+        } catch (err) {
+            writeDb.close();
+            console.error('❌ Profile activation error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    } else {
+        // PostgreSQL
+        try {
+            await db.query('UPDATE user_profiles SET is_active = false');
+            const result = await db.query('UPDATE user_profiles SET is_active = true, updated_at = NOW() WHERE profile_id = $1', [profileId]);
+            if (result.rowCount === 0) {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+            res.json({ success: true, message: 'Profile activated successfully' });
+        } catch (err) {
+            console.error('❌ Profile activation error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    }
+});
+
+// Update profile fields
+app.put('/api/profile/:profileId', async (req, res) => {
+    const { profileId } = req.params;
+    const updates = req.body;
+    
+    // Whitelist of allowed fields to update
+    const allowedFields = [
+        'profile_name', 'full_name', 'first_name', 'last_name', 'email', 'phone', 'phone_country',
+        'linkedin_url', 'github', 'website', 'portfolio_url', 'location', 'title', 'summary', 'skills',
+        'address_street', 'address_city', 'address_state', 'address_zip', 'address_country',
+        'work_authorization', 'requires_visa_sponsorship', 'security_clearance',
+        'veteran_status', 'disability_status', 'gender', 'race_ethnicity',
+        'salary_min', 'salary_max', 'salary_currency', 'earliest_start_date',
+        'willing_to_relocate', 'remote_preference', 'years_of_experience'
+    ];
+    
+    // Filter updates to only allowed fields
+    const filteredUpdates = {};
+    for (const [key, value] of Object.entries(updates)) {
+        if (allowedFields.includes(key)) {
+            filteredUpdates[key] = value;
+        }
+    }
+    
+    if (Object.keys(filteredUpdates).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    // Build update query
+    const fields = Object.keys(filteredUpdates);
+    const values = Object.values(filteredUpdates);
+    
+    if (dbType === 'sqlite') {
+        const sqlite3 = require('sqlite3').verbose();
+        const DB_PATH = process.env.DB_PATH || require('path').join(__dirname, '..', 'src', 'linkedin_jobs.sqlite');
+        const writeDb = new sqlite3.Database(DB_PATH);
+        
+        const setClause = fields.map(f => `${f} = ?`).join(', ');
+        const query = `UPDATE user_profiles SET ${setClause}, updated_at = datetime("now") WHERE profile_id = ?`;
+        values.push(profileId);
+        
+        try {
+            await new Promise((resolve, reject) => {
+                writeDb.run(query, values, function(err) {
+                    if (err) reject(err);
+                    else if (this.changes === 0) reject(new Error('Profile not found'));
+                    else resolve();
+                });
+            });
+            
+            writeDb.close();
+            res.json({ success: true, message: 'Profile updated successfully', updatedFields: fields });
+        } catch (err) {
+            writeDb.close();
+            console.error('❌ Profile update error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
+    } else {
+        // PostgreSQL
+        const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
+        const query = `UPDATE user_profiles SET ${setClause}, updated_at = NOW() WHERE profile_id = $${fields.length + 1}`;
+        values.push(profileId);
+        
+        try {
+            const result = await db.query(query, values);
+            if (result.rowCount === 0) {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+            res.json({ success: true, message: 'Profile updated successfully', updatedFields: fields });
+        } catch (err) {
+            console.error('❌ Profile update error:', err.message);
+            res.status(500).json({ error: err.message });
+        }
     }
 });
 

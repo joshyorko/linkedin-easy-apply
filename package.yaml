@@ -16,30 +16,24 @@ external-endpoints:
       - host: "0.0.0.0"
         port: 443
 
-
 dependencies:
   conda-forge:
     - python=3.12.11
     - uv=0.8.13
   pypi:
-    - sema4ai-actions=1.5.0
+    - sema4ai-actions=1.6.5
     - robocorp-browser=2.3.5
-    - robocorp-log=3.0.1      # Comprehensive logging with HTML reports and sensitive data redaction
+    - robocorp-log=3.0.1
     - python-dotenv=1.1.1
     - beautifulsoup4=4.14.2
     - pandas=2.3.3
     - openai=2.3.0 # OpenAI Python SDK with structured outputs support
-    - pypdf=6.1.1     # PDF text extraction for resume parsing
-    - Pillow=11.3.0  # Image processing for screenshot annotations (optional but recommended)
-    # Database support:
-    # - SQLite is built into Python 3, no additional dependency needed
-    # - PostgreSQL support (optional, install if using DATABASE_TYPE=postgres):
-    - psycopg2-binary=2.9.11  # PostgreSQL adapter for Python
-    
+    - pypdf=6.1.1 # PDF text extraction for resume parsing
+    - Pillow=11.3.0 # Image processing for screenshot annotations (optional but recommended)
+    - psycopg2-binary=2.9.11
 
 #post-install:
 #  - playwright install chromium
-
 
 #dev-dependencies:
 #  conda-forge:

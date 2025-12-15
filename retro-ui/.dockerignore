@@ -9,6 +9,3 @@ npm-debug.log
 # Ignore scripts (not needed in container)
 start.sh
 status.sh
-
-# Ignore lock files (using package.json only)
-package-lock.json
