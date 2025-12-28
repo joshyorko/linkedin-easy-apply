@@ -140,23 +140,19 @@ def apply_to_job_by_url(
     headless: bool = True,
     allow_submit: bool = False
 ) -> Response:
-    """Apply to a LinkedIn job directly by URL/ID with dynamic form scraping.
-    
-    This action:
-    1. Navigates directly to the job page
-    2. Checks if Easy Apply is available (gracefully exits if not)
-    3. Dynamically scrapes the Easy Apply form
-    4. Generates answers using LLM and user profile
-    5. Applies immediately
-    6. Saves job to database (even if Easy Apply fails)
-    
+    """Open a LinkedIn job by URL/ID, scrape Easy Apply, generate answers, and
+    optionally submit.
+
+    Navigates to the job, checks Easy Apply availability, snapshots the form,
+    builds answers from the active profile, and saves job data even on failure.
+
     Args:
-        job_url: LinkedIn job URL (e.g., "https://www.linkedin.com/jobs/view/1234567890") or just the job ID
-        headless: Run browser in headless mode (default: True)
-        allow_submit: Actually submit application (default: False for safety)
-    
-    Returns:
-        Response with application result
+        job_url: Full LinkedIn job URL or job ID to apply to.
+        headless: Run the browser in headless mode (True) or with a visible
+            browser window (False). Use headless=True for quiet/background
+            runs and headless=False when debugging or inspecting the browser.
+        allow_submit: If True the action will actually submit the application. If
+            False, performs a dry-run that fills the form but does not send it.
     """
     # Setup logging
     run_id = f"oneoff_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

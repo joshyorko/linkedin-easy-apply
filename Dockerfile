@@ -59,6 +59,11 @@ WORKDIR /action-server/actions
 RUN mkdir -p /action-server/actions/uploaded_files \
     && chown -R as-user:as-user /action-server/actions/uploaded_files
 
+# Ensure files copied into the image are writable by the unprivileged user
+# and create an output directory for logs and screenshots.
+RUN mkdir -p /action-server/actions/output \
+    && chown -R as-user:as-user /action-server/actions \
+    && chown -R as-user:as-user /action-server/actions/uploaded_files
 
 COPY . .
 
@@ -71,6 +76,9 @@ RUN chmod +x /usr/local/bin/start-action-server.sh
 USER as-user
 RUN action-server import --datadir=/action-server/datadir
 
+# Create the sema4ai config directory and copy OAuth2 settings
+RUN mkdir -p /home/as-user/.sema4ai/action-server
+COPY --chown=as-user:as-user oauth2-settings.yaml /home/as-user/.sema4ai/action-server/oauth2_config.yaml
 
 USER as-user
 

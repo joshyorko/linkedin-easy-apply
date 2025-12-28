@@ -713,7 +713,7 @@ function clearConsole() {
 async function checkServerStatus() {
     try {
         // Check if action server root is accessible
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/`);
+        const response = await fetch(`/api/action-server/`);
         if (response.ok) {
             document.getElementById('server-status').textContent = 'ONLINE';
             document.getElementById('server-status').style.color = '#00ff00';
@@ -947,7 +947,7 @@ async function executeSearch(event) {
     });
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/search-linkedin-easy-apply/run`, {
+        const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/search-linkedin-easy-apply/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1183,7 +1183,7 @@ async function enrichJobs() {
     try {
         const payload = runId ? { run_id: runId } : {};
         
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/enrich-and-generate-answers/run`, {
+        const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/enrich-and-generate-answers/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1356,7 +1356,7 @@ async function submitBatchApplyByRunId(event) {
     });
 
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/batch-apply-by-run-id/run`, {
+        const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/batch-apply-by-run-id/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1509,7 +1509,7 @@ async function applyByUrl(event) {
     });
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/apply-to-job-by-url/run`, {
+        const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/apply-to-job-by-url/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1597,7 +1597,7 @@ async function checkReadyJobs() {
     });
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/check-which-jobs-ready/run`, {
+        const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/check-which-jobs-ready/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
@@ -1804,7 +1804,7 @@ async function confirmApply(jobId) {
     });
     
     try {
-        const response = await fetch(`${CONFIG.ACTION_SERVER_URL}/api/actions/linkedin-easy-apply-server/apply-to-single-job/run`, {
+const response = await fetch(`/api/action-server/api/actions/linkedin-easy-apply-server/apply-to-single-job/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 

@@ -99,7 +99,7 @@ def parse_resume_and_save_profile(
 
 
 @action
-def get_profile_history_list(limit: int = 20) -> Response:
+def get_profile_history_list() -> Response:
     """
     Get a list of all saved user profile versions with metadata.
     
@@ -107,15 +107,13 @@ def get_profile_history_list(limit: int = 20) -> Response:
     profile was created, how many applications used it, and success rates.
     Useful for tracking profile changes and seeing which versions perform best.
     
-    Args:
-        limit: Maximum number of profiles to return (default: 20)
-    
     Returns:
-        Response with list of profile metadata
+        Response with list of profile metadata (up to 20 profiles)
     """
     try:
         from ..utils.db import get_profile_history
         
+        limit = 20
         print(f"[ACTION] Getting profile history (limit={limit})")
         
         # Get active profile info

@@ -4,9 +4,13 @@ Enriched Answers Management
 Handles storage and retrieval of AI-generated form answers in a separate table.
 """
 import json
+import os
 import uuid
 from typing import Dict, Any, Optional, List
 from .db import get_connection
+
+# Detect database type for SQL compatibility
+_is_postgres = os.getenv("DATABASE_TYPE", "sqlite").lower() == "postgres"
 
 
 def save_enriched_answers(
@@ -37,25 +41,45 @@ def save_enriched_answers(
     """
     conn = get_connection()
     answer_id = str(uuid.uuid4())
+    cursor = conn.cursor()
     
     try:
-        conn.execute("""
-            INSERT INTO enriched_answers (
-                answer_id, job_id, answers_json, profile_id,
-                confidence_score, unanswered_fields, model_used,
-                prompt_tokens, completion_tokens
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [
-            answer_id,
-            job_id,
-            json.dumps(answers),
-            profile_id,
-            confidence_score,
-            json.dumps(unanswered_fields or []),
-            model_used,
-            prompt_tokens,
-            completion_tokens
-        ])
+        if _is_postgres:
+            cursor.execute("""
+                INSERT INTO enriched_answers (
+                    answer_id, job_id, answers_json, profile_id,
+                    confidence_score, unanswered_fields, model_used,
+                    prompt_tokens, completion_tokens
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, [
+                answer_id,
+                job_id,
+                json.dumps(answers),
+                profile_id,
+                confidence_score,
+                json.dumps(unanswered_fields or []),
+                model_used,
+                prompt_tokens,
+                completion_tokens
+            ])
+        else:
+            cursor.execute("""
+                INSERT INTO enriched_answers (
+                    answer_id, job_id, answers_json, profile_id,
+                    confidence_score, unanswered_fields, model_used,
+                    prompt_tokens, completion_tokens
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                answer_id,
+                job_id,
+                json.dumps(answers),
+                profile_id,
+                confidence_score,
+                json.dumps(unanswered_fields or []),
+                model_used,
+                prompt_tokens,
+                completion_tokens
+            ])
         
         conn.commit()  # CRITICAL: Commit the transaction!
         
@@ -77,18 +101,21 @@ def get_enriched_answers(job_id: str) -> Optional[Dict[str, Any]]:
         Dict with answers_json, profile_id, confidence_score, etc. or None
     """
     conn = get_connection()
+    cursor = conn.cursor()
     
     try:
-        result = conn.execute("""
-            SELECT 
+        placeholder = "%s" if _is_postgres else "?"
+        cursor.execute(f"""
+            SELECT
                 answer_id, job_id, answers_json, profile_id,
                 generated_at, confidence_score, unanswered_fields,
                 model_used, used_for_application, application_date
             FROM enriched_answers
-            WHERE job_id = ?
+            WHERE job_id = {placeholder}
             ORDER BY generated_at DESC
             LIMIT 1
-        """, [job_id]).fetchone()
+        """, [job_id])
+        result = cursor.fetchone()
         
         if not result:
             return None
@@ -118,17 +145,19 @@ def get_enriched_answers(job_id: str) -> Optional[Dict[str, Any]]:
 def mark_answers_used(job_id: str) -> None:
     """Mark enriched answers as used for an application."""
     conn = get_connection()
-    
+    cursor = conn.cursor()
+
     try:
-        conn.execute("""
+        placeholder = "%s" if _is_postgres else "?"
+        cursor.execute(f"""
             UPDATE enriched_answers
-            SET used_for_application = 1,
+            SET used_for_application = true,
                 application_date = CURRENT_TIMESTAMP
-            WHERE job_id = ?
+            WHERE job_id = {placeholder}
         """, [job_id])
-        
+
         conn.commit()  # CRITICAL: Commit the transaction!
-        
+
     finally:
         pass  # Singleton connection - do not close
 
@@ -144,21 +173,23 @@ def get_jobs_with_enriched_answers() -> List[str]:
     - Have valid job details (not "Unknown Title")
     """
     conn = get_connection()
+    cursor = conn.cursor()
     
     try:
-        results = conn.execute("""
-            SELECT DISTINCT ea.job_id 
+        cursor.execute("""
+            SELECT DISTINCT ea.job_id
             FROM enriched_answers ea
             INNER JOIN job_postings jp ON ea.job_id = jp.job_id
             WHERE LENGTH(ea.answers_json) > 2
-              AND (jp.is_applied = 0 OR jp.is_applied IS NULL)
-              AND jp.good_fit = 1
+              AND (jp.is_applied = false OR jp.is_applied IS NULL)
+              AND jp.good_fit = true
               AND (jp.fit_score >= 0.6 OR jp.fit_score IS NULL)
               AND jp.title IS NOT NULL
               AND jp.title != ''
               AND jp.title != 'Unknown Title'
             ORDER BY ea.generated_at DESC
-        """).fetchall()
+        """)
+        results = cursor.fetchall()
         
         return [r[0] for r in results]
         

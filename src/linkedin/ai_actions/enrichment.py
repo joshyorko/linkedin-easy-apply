@@ -566,33 +566,37 @@ def check_which_jobs_ready() -> Response:
         Response containing list of job_ids with generated answers and filtering stats
     """
     try:
-        from ..utils.db_sqlite import get_connection
+        from ..utils.db import get_connection
         
         conn = get_connection()
+        cursor = conn.cursor()
         
         # Get total jobs with enriched answers
-        total_with_answers = conn.execute("""
+        cursor.execute("""
             SELECT COUNT(DISTINCT job_id) FROM enriched_answers
             WHERE LENGTH(answers_json) > 2
-        """).fetchone()[0]
+        """)
+        total_with_answers = cursor.fetchone()[0]
         
         # Get jobs already applied to
-        already_applied = conn.execute("""
+        cursor.execute("""
             SELECT COUNT(DISTINCT ea.job_id)
             FROM enriched_answers ea
             INNER JOIN job_postings jp ON ea.job_id = jp.job_id
-            WHERE LENGTH(ea.answers_json) > 2 AND jp.is_applied = 1
-        """).fetchone()[0]
-        
+            WHERE LENGTH(ea.answers_json) > 2 AND jp.is_applied = true
+        """)
+        already_applied = cursor.fetchone()[0]
+
         # Get bad fit jobs
-        bad_fit_jobs = conn.execute("""
+        cursor.execute("""
             SELECT COUNT(DISTINCT ea.job_id)
             FROM enriched_answers ea
             INNER JOIN job_postings jp ON ea.job_id = jp.job_id
-            WHERE LENGTH(ea.answers_json) > 2 
-              AND (jp.is_applied = 0 OR jp.is_applied IS NULL)
-              AND jp.good_fit = 0
-        """).fetchone()[0]
+            WHERE LENGTH(ea.answers_json) > 2
+              AND (jp.is_applied = false OR jp.is_applied IS NULL)
+              AND jp.good_fit = false
+        """)
+        bad_fit_jobs = cursor.fetchone()[0]
         
         # Get jobs ready to apply (the actual list)
         job_ids = get_jobs_with_enriched_answers()
@@ -700,32 +704,17 @@ def update_job_fit_status(
     mark_as_good_fit: bool = True,
     fit_score: Optional[float] = None
 ) -> Response:
-    """
-    Update job fit analysis results for one or more jobs.
-    
-    This action allows you to manually override AI-generated fit analysis,
-    marking jobs as good/bad fits and setting custom fit scores. Useful for:
-    - Forcing jobs into the "ready to apply" pool
-    - Correcting AI mistakes
-    - Bulk updating fit status for testing
-    
+    """Manually set jobs as good or bad fits and optionally set a fit score.
+
     Args:
-        job_ids: List of LinkedIn job IDs to update (e.g., ["3846477685", "3912345678"])
-        mark_as_good_fit: Set True to mark as good fit, False for bad fit (default: True)
-        fit_score: Optional fit score 0.0-1.0 (if None, will set to 0.8 for good_fit=True, 0.3 for False)
-        
-    Returns:
-        Response with update results including count of jobs updated
-        
-    Examples:
-        # Mark multiple jobs as good fits with default high score
-        update_job_fit_status(["123", "456", "789"], mark_as_good_fit=True)
-        
-        # Mark jobs as bad fits
-        update_job_fit_status(["999"], mark_as_good_fit=False)
-        
-        # Set custom fit score
-        update_job_fit_status(["123"], mark_as_good_fit=True, fit_score=0.95)
+        job_ids: List of LinkedIn job IDs to update.
+        mark_as_good_fit: If True, mark jobs as good fits; if False, mark as bad fits.
+        fit_score: Optionally set a fit score between 0.0-1.0 (defaults to 0.8 for good fits, 0.3 for bad).
+
+    Useful for forcing jobs into the apply queue, correcting AI mistakes, or bulk
+    testing. Provide LinkedIn job IDs, choose the fit flag, and optionally supply
+    a score between 0.0-1.0 (defaults to 0.8 for good fits, 0.3 for bad).
+    Returns counts and a sample verification.
     """
     from ..utils.db import update_job_fit_analysis
     

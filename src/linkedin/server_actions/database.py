@@ -28,7 +28,8 @@ def query_database(sql_query: str) -> Response:
         print(f"[ACTION] Executing query: {sql_query}")
         
         conn = get_connection()
-        cursor = conn.execute(sql_query)
+        cursor = conn.cursor()
+        cursor.execute(sql_query)
         result = cursor.fetchall()
         
         # Get column names from cursor description
@@ -70,23 +71,17 @@ def query_database(sql_query: str) -> Response:
 @action(is_consequential=False)
 def get_project_file(file_path: str) -> Response[str]:
     """
-    Read contents of a file in the project directory.
-    
-    Useful for inspecting configuration files, SQL schemas, documentation, and action code
-    without leaving the action interface. Great for debugging and understanding the project structure.
-    
-    Common files to inspect:
-    - package.yaml (dependencies and config)
-    - sql/schema.sql (database schema)
-    - README.md (project documentation)
-    - src/linkedin/[module].py (action code)
-    - .env.example (environment variable template)
-    
+    Return the contents of a project file by relative path.
+
+    Handy for quickly inspecting config, SQL, docs, or action code without
+    leaving the action interface. Pass paths like "package.yaml" or
+    "sql/schema.sql" and receive the file text or a helpful error message.
+
     Args:
-        file_path: Relative path from project root (e.g., "package.yaml", "sql/schema.sql")
-    
+        file_path: Relative path from the project root to the file you want to read (e.g., "package.yaml", "sql/schema.sql").
+
     Returns:
-        Response with file contents or error if not found
+        Response containing the file contents or an error message.
     """
     try:
         # Get project root (go up from src/linkedin/server_actions to project root)

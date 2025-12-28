@@ -414,14 +414,10 @@ def get_action_run_logs(run_id: str) -> Response[str]:
 
 @action(is_consequential=False)
 def get_action_run_logs_latest() -> Response[str]:
-    """Get the execution logs for the most recent action run.
-    
-    Returns action run logs in plain text by requesting them from the action server.
-    This is a convenience wrapper that automatically finds and fetches the latest run's logs.
-    Perfect for quick debugging when you just ran an action and want to see what happened.
-    
-    Returns:
-        Response with the plain text output logs of the most recent run
+    """Fetch plain-text logs for the most recent action run.
+
+    Convenience wrapper that looks up the latest run on the action server and
+    returns its output logs—ideal for quick post-run debugging.
     """
     try:
         print(f"[ACTION] Fetching logs for latest run")

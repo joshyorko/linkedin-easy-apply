@@ -6,6 +6,8 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const ACTION_SERVER_URL = process.env.ACTION_SERVER_URL || 'http://localhost:8082';
+// Optional API key to authenticate with action server (kept server-side)
+const ACTION_SERVER_API_KEY = process.env.ACTION_SERVER_API_KEY || null;
 const DATABASE_TYPE = process.env.DATABASE_TYPE || 'sqlite';
 
 // Database setup based on type
@@ -598,26 +600,64 @@ app.put('/api/profile/:profileId', async (req, res) => {
     }
 });
 
-// Proxy to action server (forward POST requests)
+// Proxy to action server (forward GET/POST requests and attach API key if configured)
+app.get('/api/action-server/*', async (req, res) => {
+    const actionPath = req.params[0];
+    const actionServerUrl = `${ACTION_SERVER_URL}/${actionPath}`;
+
+    console.log('🔄 Proxying GET to action server:', actionServerUrl);
+
+    try {
+        const headers = {};
+        if (ACTION_SERVER_API_KEY) {
+            headers['Authorization'] = `Bearer ${ACTION_SERVER_API_KEY}`;
+            headers['X-API-Key'] = ACTION_SERVER_API_KEY;
+        }
+
+        const response = await fetch(actionServerUrl, {
+            method: 'GET',
+            headers
+        });
+
+        const data = await response.text();
+        // Try to parse JSON but fall back to text
+        try {
+            const json = JSON.parse(data);
+            res.status(response.status).json(json);
+        } catch (e) {
+            res.status(response.status).send(data);
+        }
+    } catch (error) {
+        console.error('❌ Proxy GET error:', error.message);
+        res.status(500).json({ error: 'Failed to connect to action server' });
+    }
+});
+
 app.post('/api/action-server/*', async (req, res) => {
     const actionPath = req.params[0];
     const actionServerUrl = `${ACTION_SERVER_URL}/${actionPath}`;
     
-    console.log('🔄 Proxying to action server:', actionServerUrl);
+    console.log('🔄 Proxying POST to action server:', actionServerUrl);
     
     try {
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (ACTION_SERVER_API_KEY) {
+            headers['Authorization'] = `Bearer ${ACTION_SERVER_API_KEY}`;
+            headers['X-API-Key'] = ACTION_SERVER_API_KEY;
+        }
+
         const response = await fetch(actionServerUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify(req.body)
         });
         
         const data = await response.json();
         res.status(response.status).json(data);
     } catch (error) {
-        console.error('❌ Proxy error:', error.message);
+        console.error('❌ Proxy POST error:', error.message);
         res.status(500).json({ error: 'Failed to connect to action server' });
     }
 });
@@ -650,6 +690,7 @@ app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`�️  Database Type: ${dbType.toUpperCase()}`);
     console.log(`🔗 Action Server: ${ACTION_SERVER_URL}`);
+    console.log(`🔐 Action Server API key configured: ${ACTION_SERVER_API_KEY ? 'yes' : 'no'}`);
     console.log('');
     console.log('📖 Available Endpoints:');
     console.log('   POST /api/query - Execute SQL queries');
