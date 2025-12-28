@@ -139,16 +139,27 @@ app.get('/api/query/active-profile', async (req, res) => {
 
 app.get('/api/query/runs-with-stats', async (req, res) => {
     try {
-        const query = `
-            SELECT DISTINCT run_id, 
-            COUNT(*) as job_count,
-            MAX(scraped_at) as timestamp,
-            GROUP_CONCAT(DISTINCT CASE WHEN is_applied = 1 THEN job_id END) as applied_jobs
-            FROM job_postings 
-            GROUP BY run_id 
-            ORDER BY timestamp DESC 
-            LIMIT 20
-        `;
+        const query = dbType === 'postgres'
+            ? `
+                SELECT DISTINCT run_id, 
+                COUNT(*) as job_count,
+                MAX(scraped_at) as timestamp,
+                STRING_AGG(CASE WHEN is_applied = true THEN job_id END, ',') as applied_jobs
+                FROM job_postings 
+                GROUP BY run_id 
+                ORDER BY timestamp DESC 
+                LIMIT 20
+            `
+            : `
+                SELECT DISTINCT run_id, 
+                COUNT(*) as job_count,
+                MAX(scraped_at) as timestamp,
+                GROUP_CONCAT(DISTINCT CASE WHEN is_applied = 1 THEN job_id END) as applied_jobs
+                FROM job_postings 
+                GROUP BY run_id 
+                ORDER BY timestamp DESC 
+                LIMIT 20
+            `;
         const result = await internalQuery(query);
         res.json(result);
     } catch (err) {

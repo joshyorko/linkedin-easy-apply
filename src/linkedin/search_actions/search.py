@@ -176,23 +176,67 @@ def search_linkedin_easy_apply(
             )
         time.sleep(0.8)
         
-        # Easy Apply toggle (robust fallbacks)
+        # Easy Apply toggle (robust fallbacks) - MUST toggle this filter for Easy Apply only results
         toggled = False
-        toggle_text_variants = [
-            "Off Toggle Easy Apply filter",
-            "Toggle Easy Apply filter",
-            "Easy Apply",
+        easy_apply_toggle_selectors = [
+            # Switch/toggle input with label
+            'input[id*="easyApply"]',
+            'input[name*="easyApply"]',
+            'input[aria-label*="Easy Apply"]',
+            # Label that contains the toggle
+            'label:has-text("Easy Apply")',
+            # Switch elements
+            '[role="switch"][aria-label*="Easy Apply"]',
+            'button[role="switch"]:has-text("Easy Apply")',
+            # LinkedIn's specific toggle structure
+            'div.search-reusables__filter-binary-toggle:has-text("Easy Apply") input',
+            'div.search-reusables__filter-binary-toggle:has-text("Easy Apply") label',
         ]
-
-        for txt in toggle_text_variants:
+        
+        for selector in easy_apply_toggle_selectors:
             try:
-                page.get_by_text(txt, exact=False).click()
-                toggled = True
-                break
-            except Exception:
-                pass
+                elem = page.locator(selector).first
+                if elem.count() > 0:
+                    # Check if it's already checked/on
+                    is_checked = elem.get_attribute('aria-checked') == 'true' or elem.is_checked() if hasattr(elem, 'is_checked') else False
+                    if not is_checked:
+                        elem.click(timeout=3000)
+                        print(f"[Filters] ✓ Toggled Easy Apply filter via: {selector}")
+                        toggled = True
+                        break
+                    else:
+                        print(f"[Filters] Easy Apply filter already enabled")
+                        toggled = True
+                        break
+            except Exception as e:
+                print(f"[Filters] Easy Apply selector '{selector}' failed: {e}")
+                continue
+        
+        # Fallback: try text-based clicking
         if not toggled:
-            print("Warning: Could not positively toggle Easy Apply filter (may already be on)")
+            toggle_text_variants = [
+                "Off Toggle Easy Apply filter",
+                "Toggle Easy Apply filter", 
+                "Easy Apply",
+            ]
+            for txt in toggle_text_variants:
+                try:
+                    elem = page.get_by_text(txt, exact=False).first
+                    if elem.count() > 0:
+                        elem.click(timeout=3000)
+                        print(f"[Filters] ✓ Toggled Easy Apply via text: '{txt}'")
+                        toggled = True
+                        break
+                except Exception:
+                    pass
+        
+        if not toggled:
+            log_warning(
+                "Could not toggle Easy Apply filter",
+                details="Results may include non-Easy Apply jobs. Consider running headless=False to debug.",
+                screenshot=True,
+                screenshot_name="easy_apply_toggle_failed"
+            )
 
         # Apply work arrangement filters if requested
         work_filters_requested = []
@@ -273,9 +317,12 @@ def search_linkedin_easy_apply(
             applied_btn = False
             for name in apply_variants:
                 try:
-                    page.get_by_role("button", name=name).click()
-                    applied_btn = True
-                    break
+                    btn = page.get_by_role("button", name=name).first
+                    if btn.count() > 0:
+                        btn.click(timeout=5000)
+                        applied_btn = True
+                        print(f"[Filters] ✓ Clicked apply filters button: '{name}'")
+                        break
                 except Exception:
                     pass
             if not applied_btn:
@@ -283,6 +330,7 @@ def search_linkedin_easy_apply(
                 try:
                     page.get_by_label("All filters", exact=True).get_by_role("button").filter(has_text="Apply").first.click()
                     applied_btn = True
+                    print(f"[Filters] ✓ Applied filters via dialog button")
                 except Exception:
                     print("Warning: Could not find an Apply/Show results button; proceeding anyway")
         except Exception:
@@ -291,6 +339,17 @@ def search_linkedin_easy_apply(
         time.sleep(2.5)
 
         search_url = page.url
+        
+        # Verify Easy Apply filter is active by checking URL
+        if 'f_AL=true' in search_url:
+            print(f"[Filters] ✓ Easy Apply filter confirmed active in URL")
+        else:
+            log_warning(
+                "Easy Apply filter may not be active",
+                details=f"URL does not contain f_AL=true. Current URL: {search_url}",
+                screenshot=True,
+                screenshot_name="easy_apply_filter_not_in_url"
+            )
 
         # Collect IDs with scrolling and pagination
         log.info("Collecting job IDs with pagination...")

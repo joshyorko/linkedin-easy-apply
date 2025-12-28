@@ -2319,7 +2319,7 @@ async function switchToSelectedProfile() {
             log('success', 'Profile activated successfully');
             
             // Refresh stats and reload profile manager
-            await refreshStats();
+            await loadStats();
             await viewProfile();
         } else {
             const error = await response.json();
@@ -2420,7 +2420,7 @@ async function saveProfileChanges(event) {
             log('success', `Profile updated: ${result.updatedFields?.join(', ')}`);
             
             // Refresh stats
-            await refreshStats();
+            await loadStats();
         } else {
             const error = await response.json();
             throw new Error(error.error || 'Failed to save profile');

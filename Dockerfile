@@ -76,10 +76,6 @@ RUN chmod +x /usr/local/bin/start-action-server.sh
 USER as-user
 RUN action-server import --datadir=/action-server/datadir
 
-# Create the sema4ai config directory and copy OAuth2 settings
-RUN mkdir -p /home/as-user/.sema4ai/action-server
-COPY --chown=as-user:as-user oauth2-settings.yaml /home/as-user/.sema4ai/action-server/oauth2_config.yaml
-
 USER as-user
 
 

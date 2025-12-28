@@ -58,15 +58,15 @@ services:
       # Point to action server container
       - ACTION_SERVER_URL=http://action-server:8080
       # Pass action server API key (optional) for backend proxy auth
-      - ACTION_SERVER_API_KEY=${ACTION_SERVER_API_KEY}
+      #- ACTION_SERVER_API_KEY=${ACTION_SERVER_API_KEY}
       # Database path (if using SQLite via volume mount)
       - DB_PATH=/data/linkedin_jobs.sqlite
       # For PostgreSQL (alternative)
       - DATABASE_TYPE=postgres
       - DATABASE_URL=postgresql://linkedin_user:dev_password@postgres:5432/linkedin_jobs
-    depends_on:
-      - action-server
-      - postgres
+    #depends_on:
+    #  - action-server
+    #  - postgres
     restart: unless-stopped
     networks:
       - linkedin-network
