@@ -72,6 +72,17 @@ services:
       timeout: 5s
       retries: 3
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: linkedin-easy-apply-cloudflared
+    command: tunnel run --token ${CLOUDFLARED_TOKEN}
+    depends_on:
+      action-server:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - linkedin-network
+
 networks:
   linkedin-network:
     driver: bridge

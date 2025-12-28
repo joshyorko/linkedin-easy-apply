@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     procps \
     openssl \
     ca-certificates \
+    supervisor \
     libglib2.0-0 \
     libnspr4 \
     libnss3 \
@@ -61,6 +62,11 @@ RUN mkdir -p /action-server/actions/uploaded_files \
 
 COPY . .
 
+COPY scripts/start-action-server.sh /usr/local/bin/start-action-server.sh
+COPY docker/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/supervisor/action-server.conf /etc/supervisor/conf.d/action-server.conf
+RUN chmod +x /usr/local/bin/start-action-server.sh
+
 
 USER as-user
 RUN action-server import --datadir=/action-server/datadir
@@ -73,4 +79,4 @@ ENV HOME=/home/as-user
 
 EXPOSE 8080
 
-CMD ["action-server", "start", "--address", "0.0.0.0", "--port", "8080", "--datadir=/action-server/datadir", "--actions-sync=false", "--min-processes", "1", "--max-processes", "3", "--reuse-processes", "--full-openapi-spec"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

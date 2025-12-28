@@ -1,7 +1,7 @@
 spec-version: v2
 
 # Required: A short name for the action package
-name: LinkedIn Easy Apply Server
+name: linkedin-easy-apply-server
 
 # Required: A description of what's in the action package.
 description: A set of tools allowing you to easily apply to LinkedIn Easy Apply jobs.
@@ -21,15 +21,15 @@ dependencies:
     - python=3.12.11
     - uv=0.8.13
   pypi:
-    - sema4ai-actions=1.6.5
+    - sema4ai-actions=1.6.6
     - robocorp-browser=2.3.5
     - robocorp-log=3.0.1
-    - python-dotenv=1.1.1
-    - beautifulsoup4=4.14.2
+    - python-dotenv=1.2.1
+    - beautifulsoup4=4.14.3
     - pandas=2.3.3
-    - openai=2.3.0 # OpenAI Python SDK with structured outputs support
-    - pypdf=6.1.1 # PDF text extraction for resume parsing
-    - Pillow=11.3.0 # Image processing for screenshot annotations (optional but recommended)
+    - openai=2.14.0
+    - pypdf=6.5.0
+    - Pillow=12.0.0
     - psycopg2-binary=2.9.11
 
 #post-install:
