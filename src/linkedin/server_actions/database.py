@@ -3,9 +3,10 @@ import os
 from pathlib import Path
 
 from ..utils.db import get_connection
+from ..utils.responses import QueryDatabaseResponse
 
 @action(is_consequential=False)
-def query_database(sql_query: str) -> Response:
+def query_database(sql_query: str) -> QueryDatabaseResponse:
     """
     Execute SQL query against the configured database (SQLite/PostgreSQL) and return results. Utility for inspecting database state and debugging enrichment workflow. SELECT statements only.
     
@@ -19,11 +20,11 @@ def query_database(sql_query: str) -> Response:
         # Safety check - only allow SELECT queries
         query_upper = sql_query.strip().upper()
         if not query_upper.startswith('SELECT'):
-            return Response(result={
-                "success": False,
-                "error": "Only SELECT queries are allowed for safety. Use other actions for INSERT/UPDATE/DELETE.",
-                "query": sql_query
-            })
+            return QueryDatabaseResponse(
+                result="Only SELECT queries are allowed for safety. Use other actions for INSERT/UPDATE/DELETE.",
+                success=False,
+                query=sql_query
+            )
         
         print(f"[ACTION] Executing query: {sql_query}")
         
@@ -49,23 +50,24 @@ def query_database(sql_query: str) -> Response:
         
         print(f"[ACTION] Query returned {len(rows)} rows")
         
-        return Response(result={
-            "success": True,
-            "query": sql_query,
-            "columns": columns,
-            "rows": rows,
-            "row_count": len(rows)
-        })
+        return QueryDatabaseResponse(
+            result=f"Query returned {len(rows)} rows",
+            success=True,
+            query=sql_query,
+            columns=columns,
+            rows=rows,
+            row_count=len(rows)
+        )
         
     except Exception as e:
         print(f"[ACTION] Error executing query: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "query": sql_query
-        })
+        return QueryDatabaseResponse(
+            result=f"Error executing query: {str(e)}",
+            success=False,
+            query=sql_query
+        )
 
 
 @action(is_consequential=False)

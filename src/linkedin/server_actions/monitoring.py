@@ -6,10 +6,11 @@ import urllib.parse
 from typing import Optional
 
 from ..utils.db import get_connection
+from ..utils.responses import RunStatusResponse, RunListResponse, CancelRunResponse, ActionsListResponse
 
 
 @action(is_consequential=False)
-def check_run_status(run_id: str) -> Response:
+def check_run_status(run_id: str) -> RunStatusResponse:
     """Check the status of a long-running action using its run ID.
     
     When an action takes a long time (like parse_resume or search_linkedin), 
@@ -40,22 +41,24 @@ def check_run_status(run_id: str) -> Response:
         response = http_get(api_url)
         
         if response.status_code == 404:
-            return Response(result={
-                "success": False,
-                "error": "Run ID not found",
-                "run_id": run_id,
-                "hint": "This run may not exist, or the server was restarted"
-            })
+            return RunStatusResponse(
+                result="Run ID not found",
+                error="Run ID not found",
+                success=False,
+                run_id=run_id,
+                hint="This run may not exist, or the server was restarted"
+            )
         
         if response.status_code != 200:
-            return Response(result={
-                "success": False,
-                "error": f"Server returned status code {response.status_code}",
-                "run_id": run_id
-            })
+            return RunStatusResponse(
+                result=f"Server returned status code {response.status_code}",
+                error=f"Server returned status code {response.status_code}",
+                success=False,
+                run_id=run_id
+            )
         
         run_data = response.json()
-        
+
         # Parse the status
         status = run_data.get("status")
         status_map = {
@@ -65,60 +68,61 @@ def check_run_status(run_id: str) -> Response:
             3: "failed",
             4: "cancelled"
         }
-        
+
         status_name = status_map.get(status, "unknown")
-        
-        # Build response based on status
-        result = {
-            "success": True,
-            "run_id": run_id,
-            "status": status,
-            "status_name": status_name,
-            "action_id": run_data.get("action_id"),
-            "start_time": run_data.get("start_time"),
-            "run_time": run_data.get("run_time"),  # seconds
-        }
-        
+
+        # Build common fields
+        log_url = None
+        hint = None
+        error_message = None
+        result_message = ""
+
         if status == 1:  # Running
             elapsed = run_data.get("run_time", 0)
-            result["message"] = f"⏳ Action is still running (elapsed: {elapsed:.1f}s)"
-            result["hint"] = "Check again in 10-30 seconds"
-            
+            result_message = f"Action is still running (elapsed: {elapsed:.1f}s)"
+            hint = "Check again in 10-30 seconds"
+
         elif status == 2:  # Completed
-            result["message"] = "✅ Action completed successfully!"
-            # Try to parse the result
-            result_str = run_data.get("result")
-            if result_str:
-                try:
-                    result["result"] = json.loads(result_str)
-                except:
-                    result["result"] = result_str
-            result["log_url"] = f"{server_url}/api/runs/{run_id}/log.html"
-            
+            result_message = "Action completed successfully!"
+            log_url = f"{server_url}/api/runs/{run_id}/log.html"
+
         elif status == 3:  # Failed
-            result["message"] = "❌ Action failed"
-            result["error_message"] = run_data.get("error_message")
-            result["log_url"] = f"{server_url}/api/runs/{run_id}/log.html"
-            
+            result_message = "Action failed"
+            error_message = run_data.get("error_message")
+            log_url = f"{server_url}/api/runs/{run_id}/log.html"
+
         elif status == 4:  # Cancelled
-            result["message"] = "⛔ Action was cancelled"
-            
+            result_message = "Action was cancelled"
+
         else:  # Not started or unknown
-            result["message"] = "🔵 Action has not started yet"
-        
+            result_message = "Action has not started yet"
+
         print(f"[ACTION] Run status: {status_name} ({status})")
-        return Response(result=result)
+        return RunStatusResponse(
+            result=result_message,
+            success=True,
+            run_id=run_id,
+            status=status,
+            status_name=status_name,
+            action_id=run_data.get("action_id"),
+            start_time=run_data.get("start_time"),
+            run_time=run_data.get("run_time"),
+            log_url=log_url,
+            error_message=error_message,
+            hint=hint
+        )
         
     except Exception as e:
         print(f"[ACTION] Error checking run status: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "run_id": run_id,
-            "hint": "Make sure the action server is running and the run_id is valid"
-        })
+        return RunStatusResponse(
+            result=f"Error checking run status: {e}",
+            error=str(e),
+            success=False,
+            run_id=run_id,
+            hint="Make sure the action server is running and the run_id is valid"
+        )
 
 
 @action(is_consequential=False)
@@ -126,7 +130,7 @@ def list_runs(
     action_name: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 20
-) -> Response:
+) -> RunListResponse:
     """List all action runs with optional filtering.
     
     View all LinkedIn scraping jobs, filter by status, and monitor activity.
@@ -170,12 +174,12 @@ def list_runs(
         results = conn.execute(query).fetchall()
         
         if not results:
-            return Response(result={
-                "success": True,
-                "runs": [],
-                "count": 0,
-                "message": "No runs found in database"
-            })
+            return RunListResponse(
+                result="No runs found in database",
+                success=True,
+                runs=[],
+                count=0
+            )
         
         columns = ['run_id', 'start_time', 'end_time', 'job_count', 'processed_count', 
                    'answers_count', 'applied_count', 'good_fit_count', 'avg_fit_score', 'avg_confidence']
@@ -209,29 +213,31 @@ def list_runs(
         
         print(f"[ACTION] Found {len(enhanced_runs)} runs")
         
-        return Response(result={
-            "success": True,
-            "runs": enhanced_runs,
-            "count": len(enhanced_runs),
-            "filters": {
+        return RunListResponse(
+            result=f"Found {len(enhanced_runs)} runs",
+            success=True,
+            runs=enhanced_runs,
+            count=len(enhanced_runs),
+            filters={
                 "action_name": action_name,
                 "status": status,
                 "limit": limit
             }
-        })
+        )
         
     except Exception as e:
         print(f"[ACTION] Error listing runs: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return RunListResponse(
+            result=f"Error listing runs: {e}",
+            error=str(e),
+            success=False
+        )
 
 
 @action(is_consequential=True)
-def cancel_run(run_id: str) -> Response:
+def cancel_run(run_id: str) -> CancelRunResponse:
     """Cancel a running action by its run ID.
     
     Stop a long-running LinkedIn scrape if you made a mistake, LinkedIn is blocking,
@@ -252,23 +258,26 @@ def cancel_run(run_id: str) -> Response:
         
         status_response = http_get(status_url)
         if status_response.status_code == 404:
-            return Response(result={
-                "success": False,
-                "error": "Run ID not found",
-                "run_id": run_id
-            })
+            return CancelRunResponse(
+                result="Run ID not found",
+                error="Run ID not found",
+                success=False,
+                run_id=run_id
+            )
         
         status_data = status_response.json()
         current_status = status_data.get("status")
         
         if current_status != 1:  # Not running
             status_names = {0: "not started", 1: "running", 2: "completed", 3: "failed", 4: "cancelled"}
-            return Response(result={
-                "success": False,
-                "error": f"Run is not currently running (status: {status_names.get(current_status, 'unknown')})",
-                "run_id": run_id,
-                "current_status": current_status
-            })
+            error_msg = f"Run is not currently running (status: {status_names.get(current_status, 'unknown')})"
+            return CancelRunResponse(
+                result=error_msg,
+                error=error_msg,
+                success=False,
+                run_id=run_id,
+                current_status=current_status
+            )
         
         # Cancel the run
         cancel_url = f"{server_url}/api/runs/{run_id}/cancel"
@@ -276,35 +285,37 @@ def cancel_run(run_id: str) -> Response:
         cancel_response = http_post(cancel_url, json={})
         
         if cancel_response.status_code != 200:
-            return Response(result={
-                "success": False,
-                "error": f"Server returned status code {cancel_response.status_code}",
-                "run_id": run_id
-            })
+            return CancelRunResponse(
+                result=f"Server returned status code {cancel_response.status_code}",
+                error=f"Server returned status code {cancel_response.status_code}",
+                success=False,
+                run_id=run_id
+            )
         
         print(f"[ACTION] Successfully cancelled run {run_id}")
         
-        return Response(result={
-            "success": True,
-            "message": f"Run {run_id} has been cancelled",
-            "run_id": run_id,
-            "action_name": status_data.get("action_name"),
-            "log_url": f"{server_url}/api/runs/{run_id}/log.html"
-        })
+        return CancelRunResponse(
+            result=f"Run {run_id} has been cancelled",
+            success=True,
+            run_id=run_id,
+            action_name=status_data.get("action_name"),
+            log_url=f"{server_url}/api/runs/{run_id}/log.html"
+        )
         
     except Exception as e:
         print(f"[ACTION] Error cancelling run: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "run_id": run_id
-        })
+        return CancelRunResponse(
+            result=f"Error cancelling run: {e}",
+            error=str(e),
+            success=False,
+            run_id=run_id
+        )
 
 
 @action(is_consequential=False)
-def list_available_actions() -> Response:
+def list_available_actions() -> ActionsListResponse:
     """List all available actions in the action server.
     
     Discover what actions are available, useful for API exploration and documentation.
@@ -322,10 +333,11 @@ def list_available_actions() -> Response:
         response = http_get(api_url)
         
         if response.status_code != 200:
-            return Response(result={
-                "success": False,
-                "error": f"Server returned status code {response.status_code}"
-            })
+            return ActionsListResponse(
+                result=f"Server returned status code {response.status_code}",
+                error=f"Server returned status code {response.status_code}",
+                success=False
+            )
         
         packages_data = response.json()
         
@@ -346,21 +358,23 @@ def list_available_actions() -> Response:
         
         print(f"[ACTION] Found {len(simplified_actions)} actions")
         
-        return Response(result={
-            "success": True,
-            "actions": simplified_actions,
-            "count": len(simplified_actions),
-            "server_url": server_url
-        })
+        return ActionsListResponse(
+            result=f"Found {len(simplified_actions)} actions",
+            success=True,
+            actions=simplified_actions,
+            count=len(simplified_actions),
+            server_url=server_url
+        )
         
     except Exception as e:
         print(f"[ACTION] Error listing actions: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return ActionsListResponse(
+            result=f"Error listing actions: {e}",
+            error=str(e),
+            success=False
+        )
 
 
 @action(is_consequential=False)

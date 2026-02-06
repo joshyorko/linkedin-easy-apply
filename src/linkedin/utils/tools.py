@@ -27,7 +27,7 @@ from typing import List, Optional, Dict, Any, Set
 from datetime import datetime
 from urllib.parse import urljoin
 
-from .models import LinkedInJob
+from .responses import LinkedInJob
 
 from .enhanced_extraction import enhance_job_extraction
 

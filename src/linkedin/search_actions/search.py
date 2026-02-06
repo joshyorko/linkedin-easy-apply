@@ -9,7 +9,7 @@ from typing import List
 from datetime import datetime
 from pathlib import Path
 
-from ..utils.models import LinkedInJob
+from ..utils.responses import LinkedInJob, SearchResponse
 from ..utils.db import write_jobs, get_jobs_by_run_id
 from ..utils.tools import configure_browser, _collect_job_ids_with_pagination, _extract_from_job_page
 from ..utils.robolog import setup_logging, log, cleanup_logging
@@ -35,7 +35,7 @@ def search_linkedin_easy_apply(
     hybrid: bool = False,
     onsite: bool = False,
     skip_ai_enrichment: bool = False
-) -> Response:
+) -> SearchResponse:
     """Phase 1: scrape LinkedIn Easy Apply jobs and store raw results in database/CSV.
     
     Args:
@@ -453,28 +453,28 @@ def search_linkedin_easy_apply(
         log_section_end("LinkedIn Job Search", "✅")
         
         # Return simplified response with just the job IDs
-        return Response(result={
-            "run_id": run_id,
-            "search_query": query,
-            "job_ids_found": successful_job_ids,
-            "easy_apply_job_ids": easy_apply_job_ids,
-            "total_jobs": len(successful_job_ids),
-            "easy_apply_count": len(easy_apply_job_ids),
-            "db_records_written": db_written_count,
-            "csv_exported": csv_path,
-            "pending_enrichment_job_ids": easy_apply_job_ids,
-            "pending_enrichment_count": len(easy_apply_job_ids),
-            "filters": {
+        return SearchResponse(
+            result=(
+                f"Found {len(successful_job_ids)} jobs, {len(easy_apply_job_ids)} with Easy Apply. "
+                f"Run enrich_and_generate_answers(run_id='{run_id}') for AI enrichment and answer generation."
+            ),
+            run_id=run_id,
+            search_query=query,
+            job_ids_found=successful_job_ids,
+            easy_apply_job_ids=easy_apply_job_ids,
+            total_jobs=len(successful_job_ids),
+            easy_apply_count=len(easy_apply_job_ids),
+            db_records_written=db_written_count,
+            csv_exported=csv_path,
+            pending_enrichment_job_ids=easy_apply_job_ids,
+            pending_enrichment_count=len(easy_apply_job_ids),
+            filters={
                 "remote": remote,
                 "hybrid": hybrid,
                 "onsite": onsite
             },
-            "message": (
-                f"Found {len(successful_job_ids)} jobs, {len(easy_apply_job_ids)} with Easy Apply. "
-                f"Run enrich_and_generate_answers(run_id='{run_id}') for AI enrichment and answer generation."
-            ),
-            "log_file": f"./output/{run_id}/log.html"
-        })
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     except ActionError as e:
         # ActionError with screenshot

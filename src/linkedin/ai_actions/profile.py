@@ -1,4 +1,11 @@
-from sema4ai.actions import Response, action, chat
+from sema4ai.actions import action, chat
+
+from ..utils.responses import (
+    ProfileParseResponse,
+    ProfileHistoryResponse,
+    ProfileSkillsResponse,
+    ProfileEnrichResponse,
+)
 import dotenv
 import os
 import json
@@ -31,7 +38,7 @@ def parse_resume_and_save_profile(
     resume_source: str,
     is_url: bool = False,
     is_chat_file: bool = True
-) -> Response:
+) -> ProfileParseResponse:
     """
     Parse resume PDF and extract user profile using AI. Saves structured profile data (contact info, skills, experience, education) for Easy Apply automation.
     
@@ -71,35 +78,35 @@ def parse_resume_and_save_profile(
         active_profile = get_active_profile()
         profile_id = active_profile.get('profile_id') if active_profile else 'unknown'
         
-        return Response(result={
-            "success": True,
-            "message": "Successfully parsed resume and saved profile to database!",
-            "profile": user_profile,
-            "profile_id": profile_id,
-            "saved_to": "SQLite database (user_profiles table)",
-            "source_file": resume_source
-        })
+        return ProfileParseResponse(
+            result="Successfully parsed resume and saved profile to database!",
+            success=True,
+            profile=user_profile,
+            profile_id=profile_id,
+            saved_to="SQLite database (user_profiles table)",
+            source_file=resume_source,
+        )
         
     except FileNotFoundError as e:
         print(f"[ACTION] File not found: {e}")
-        return Response(result={
-            "success": False,
-            "error": "File not found. Make sure you've uploaded the resume file in chat first.",
-            "message": str(e)
-        })
+        return ProfileParseResponse(
+            result=str(e),
+            error="File not found. Make sure you've uploaded the resume file in chat first.",
+            success=False,
+        )
     except Exception as e:
         print(f"[ACTION] Error parsing resume: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "message": "Failed to parse resume. Check that it's a valid PDF and try again."
-        })
+        return ProfileParseResponse(
+            result="Failed to parse resume. Check that it's a valid PDF and try again.",
+            error=str(e),
+            success=False,
+        )
 
 
 @action
-def get_profile_history_list() -> Response:
+def get_profile_history_list() -> ProfileHistoryResponse:
     """
     Get a list of all saved user profile versions with metadata.
     
@@ -122,25 +129,26 @@ def get_profile_history_list() -> Response:
         # Get profile history
         profiles = get_profile_history(limit=limit)
         
-        return Response(result={
-            "success": True,
-            "total_profiles": len(profiles),
-            "active_profile": {
+        return ProfileHistoryResponse(
+            result=f"Found {len(profiles)} profile(s) in history.",
+            success=True,
+            total_profiles=len(profiles),
+            active_profile={
                 "name": active.get('full_name') if active else None,
                 "title": active.get('title') if active else None
             } if active else None,
-            "profiles": profiles
-        })
+            profiles=profiles,
+        )
         
     except Exception as e:
         print(f"[ACTION] Error getting profile history: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "message": "Failed to get profile history."
-        })
+        return ProfileHistoryResponse(
+            result="Failed to get profile history.",
+            error=str(e),
+            success=False,
+        )
 
 
 @action
@@ -148,7 +156,7 @@ def update_profile_skills(
     add_skills: Union[str, List[str], None] = None,
     remove_skills: Union[str, List[str], None] = None,
     set_skills: Union[str, List[str], None] = None
-) -> Response:
+) -> ProfileSkillsResponse:
     """
     Update skills in your active user profile without re-parsing resume.
     
@@ -199,11 +207,12 @@ def update_profile_skills(
         """).fetchone()
         
         if not result:
-            return Response(result={
-                "success": False,
-                "error": "No active profile found. Run parse_resume_and_save_profile() first."
-            })
-        
+            return ProfileSkillsResponse(
+                result="No active profile found. Run parse_resume_and_save_profile() first.",
+                error="No active profile found. Run parse_resume_and_save_profile() first.",
+                success=False,
+            )
+
         profile_id, current_skills_json, full_name = result
         
         # Parse current skills
@@ -243,24 +252,25 @@ def update_profile_skills(
         print(f"[Profile] Updated skills for {full_name} ({profile_id})")
         print(f"[Profile] Old skill count: {len(current_skills)}, New: {len(new_skills)}")
         
-        return Response(result={
-            "success": True,
-            "profile_id": profile_id,
-            "full_name": full_name,
-            "old_skills_count": len(current_skills),
-            "new_skills_count": len(new_skills),
-            "skills": new_skills,
-            "message": f"Updated skills for {full_name}. Now has {len(new_skills)} skills."
-        })
+        return ProfileSkillsResponse(
+            result=f"Updated skills for {full_name}. Now has {len(new_skills)} skills.",
+            success=True,
+            profile_id=profile_id,
+            full_name=full_name,
+            old_skills_count=len(current_skills),
+            new_skills_count=len(new_skills),
+            skills=new_skills,
+        )
         
     except Exception as e:
         print(f"[ACTION] Error updating profile skills: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return ProfileSkillsResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+        )
 
 
 @action
@@ -280,7 +290,7 @@ def enrich_user_profile(
     willing_to_relocate: Optional[bool] = None,
     years_of_experience: Optional[int] = None,
     portfolio_url: Union[str, None] = None
-) -> Response:
+) -> ProfileEnrichResponse:
     """
     Enrich active user profile with additional fields not captured from resume.
     
@@ -357,11 +367,12 @@ def enrich_user_profile(
         """).fetchone()
         
         if not result:
-            return Response(result={
-                "success": False,
-                "error": "No active profile found. Run parse_resume_and_save_profile() first."
-            })
-        
+            return ProfileEnrichResponse(
+                result="No active profile found. Run parse_resume_and_save_profile() first.",
+                error="No active profile found. Run parse_resume_and_save_profile() first.",
+                success=False,
+            )
+
         profile_id, full_name = result
         
         # Build update query dynamically based on provided fields
@@ -392,10 +403,11 @@ def enrich_user_profile(
                 values.append(value)
         
         if not updates:
-            return Response(result={
-                "success": False,
-                "error": "No fields provided to update. Specify at least one field."
-            })
+            return ProfileEnrichResponse(
+                result="No fields provided to update. Specify at least one field.",
+                error="No fields provided to update. Specify at least one field.",
+                success=False,
+            )
         
         # Add profile_id to values and update timestamp
         updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -412,19 +424,20 @@ def enrich_user_profile(
         
         print(f"[Profile] Enriched profile {profile_id} with {len([v for v in field_mapping.values() if v is not None])} fields")
         
-        return Response(result={
-            "success": True,
-            "profile_id": profile_id,
-            "full_name": full_name,
-            "fields_updated": [k for k, v in field_mapping.items() if v is not None],
-            "message": f"Successfully enriched profile for {full_name}!"
-        })
+        return ProfileEnrichResponse(
+            result=f"Successfully enriched profile for {full_name}!",
+            success=True,
+            profile_id=profile_id,
+            full_name=full_name,
+            fields_updated=[k for k, v in field_mapping.items() if v is not None],
+        )
         
     except Exception as e:
         print(f"[ACTION] Error enriching profile: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return ProfileEnrichResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+        )

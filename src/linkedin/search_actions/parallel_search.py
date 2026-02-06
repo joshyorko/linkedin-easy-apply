@@ -19,7 +19,7 @@ except ImportError:
     # Playwright should be in the same environment as robocorp-browser
     from playwright.sync_api import sync_playwright
 
-from ..utils.models import LinkedInJob
+from ..utils.responses import LinkedInJob, ParallelSearchResponse, SearchResponse
 from ..utils.db import write_jobs
 from ..utils.tools import _collect_job_ids_with_pagination, _extract_from_job_page
 from ..utils.robolog import setup_logging, log, cleanup_logging
@@ -192,7 +192,7 @@ def parallel_search_linkedin_easy_apply(
     remote: bool = False,
     hybrid: bool = False,
     onsite: bool = False
-) -> Response:
+) -> ParallelSearchResponse:
     """Parallel job search using multiple browser instances (RAW PLAYWRIGHT).
     
     This action spawns multiple browser windows that scrape jobs simultaneously.
@@ -478,13 +478,13 @@ def parallel_search_linkedin_easy_apply(
                 screenshot=True,
                 screenshot_name="no_jobs_found"
             )
-            return Response(result={
-                "run_id": run_id,
-                "search_query": query,
-                "total_jobs": 0,
-                "message": "No jobs found",
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ParallelSearchResponse(
+                result="No jobs found",
+                run_id=run_id,
+                search_query=query,
+                total_jobs=0,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Split job IDs into batches for parallel processing
         jobs_to_process = job_ids[:max_jobs]
@@ -603,33 +603,33 @@ def parallel_search_linkedin_easy_apply(
         
         log_section_end("Parallel LinkedIn Job Search", "✅")
         
-        return Response(result={
-            "run_id": run_id,
-            "search_query": query,
-            "job_ids_found": successful_job_ids,
-            "easy_apply_job_ids": easy_apply_job_ids,
-            "failed_job_ids": list(all_failed_jobs.keys()),
-            "failed_jobs_details": all_failed_jobs,
-            "total_jobs": len(successful_job_ids),
-            "easy_apply_count": len(easy_apply_job_ids),
-            "failed_count": len(all_failed_jobs),
-            "db_records_written": db_written_count,
-            "csv_exported": csv_path,
-            "pending_enrichment_job_ids": easy_apply_job_ids,
-            "pending_enrichment_count": len(easy_apply_job_ids),
-            "filters": {
-                "remote": remote,
-                "hybrid": hybrid,
-                "onsite": onsite
-            },
-            "parallel_workers_used": len(job_batches),
-            "message": (
+        return ParallelSearchResponse(
+            result=(
                 f"Found {len(successful_job_ids)} jobs, {len(easy_apply_job_ids)} with Easy Apply using {len(job_batches)} parallel workers. "
                 f"{len(all_failed_jobs)} jobs failed extraction. "
                 f"Run enrich_and_generate_answers(run_id='{run_id}') for AI enrichment and answer generation."
             ),
-            "log_file": f"./output/{run_id}/log.html"
-        })
+            run_id=run_id,
+            search_query=query,
+            job_ids_found=successful_job_ids,
+            easy_apply_job_ids=easy_apply_job_ids,
+            failed_job_ids=list(all_failed_jobs.keys()),
+            failed_jobs_details=all_failed_jobs,
+            total_jobs=len(successful_job_ids),
+            easy_apply_count=len(easy_apply_job_ids),
+            failed_count=len(all_failed_jobs),
+            db_records_written=db_written_count,
+            csv_exported=csv_path,
+            pending_enrichment_job_ids=easy_apply_job_ids,
+            pending_enrichment_count=len(easy_apply_job_ids),
+            filters={
+                "remote": remote,
+                "hybrid": hybrid,
+                "onsite": onsite
+            },
+            parallel_workers_used=len(job_batches),
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     except ActionError as e:
         # ActionError with screenshot (same as search.py)

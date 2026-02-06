@@ -16,6 +16,12 @@ from ..utils.db import (
     )
 from ..utils.openai_client import enrich_job, generate_answers
 from ..utils.tools import _load_profile
+from ..utils.responses import (
+    EnrichmentResponse,
+    JobReadyResponse,
+    FitAnalysisResponse,
+    FitStatusUpdateResponse,
+)
 from ..utils.enriched_answers import (
     save_enriched_answers,
     get_enriched_answers,
@@ -173,7 +179,7 @@ def enrich_and_generate_answers(
     generate_answers: bool = True,
     force_reprocess: bool = False,
     force_answer_regeneration: bool = False
-) -> Response:
+) -> EnrichmentResponse:
     """
     Phase 2: Enrich scraped jobs with OpenAI and generate Easy Apply answers.
     
@@ -203,11 +209,10 @@ def enrich_and_generate_answers(
         raise ActionError("OPENAI_API_KEY is required for enrichment and answer generation.")
     
     if not enrich_jobs and not generate_answers:
-        return Response(result={
-            "success": True,
-            "message": "Nothing to do (enrich_jobs=False and generate_answers=False).",
-            "processed": 0
-        })
+        return EnrichmentResponse(
+            result="Nothing to do (enrich_jobs=False and generate_answers=False).",
+            success=True,
+        )
     
     try:
         profile = get_active_profile()
@@ -239,15 +244,12 @@ def enrich_and_generate_answers(
             candidate_jobs = candidate_jobs[:limit]
         
         if not candidate_jobs:
-            return Response(result={
-                "success": True,
-                "message": "No jobs to process.",
-                "run_id": run_id,
-                "processed": 0,
-                "enriched": 0,
-                "answers_generated": 0,
-                "skipped": skipped_jobs
-            })
+            return EnrichmentResponse(
+                result="No jobs to process.",
+                success=True,
+                run_id=run_id,
+                skipped=skipped_jobs,
+            )
         
         enriched_count = 0
         answers_count = 0
@@ -410,16 +412,17 @@ def enrich_and_generate_answers(
             f"({enriched_count} enriched, {answers_count} answer sets generated)."
         )
         
-        return Response(result={
-            "success": True,
-            "run_id": run_id,
-            "processed": processed_count,
-            "enriched": enriched_count,
-            "answers_generated": answers_count,
-            "skipped": skipped_jobs,
-            "failed": failed_jobs,
-            "profile_id": profile.get("profile_id"),
-            "settings": {
+        return EnrichmentResponse(
+            result=message,
+            success=True,
+            run_id=run_id,
+            processed=processed_count,
+            enriched=enriched_count,
+            answers_generated=answers_count,
+            skipped=skipped_jobs,
+            failed=failed_jobs,
+            profile_id=profile.get("profile_id"),
+            settings={
                 "enrich_jobs": enrich_jobs,
                 "generate_answers": generate_answers,
                 "force_reprocess": force_reprocess,
@@ -428,9 +431,8 @@ def enrich_and_generate_answers(
                 "job_ids": job_ids,
                 "run_id": run_id
             },
-            "message": message,
-            "processed_job_ids": processed_job_ids
-        })
+            processed_job_ids=processed_job_ids,
+        )
         
     except ActionError:
         raise
@@ -438,15 +440,16 @@ def enrich_and_generate_answers(
         print(f"[ACTION] Error in enrich_and_generate_answers: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "run_id": run_id
-        })
+        return EnrichmentResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+            run_id=run_id,
+        )
 
 
 @action
-def generate_answers_for_run(run_id: str) -> Response:
+def generate_answers_for_run(run_id: str) -> EnrichmentResponse:
     """
     Deprecated wrapper for enrich_and_generate_answers(run_id=...).
     
@@ -467,22 +470,12 @@ def generate_answers_for_run(run_id: str) -> Response:
         force_answer_regeneration=False
     )
     
-    # Ensure we add a note without mutating the delegated Response in-place unexpectedly
-    result_payload = dict(delegated.result) if isinstance(delegated.result, dict) else {"result": delegated.result}
-    notes = result_payload.get("notes")
-    if not notes:
-        result_payload["notes"] = []
-    if isinstance(result_payload["notes"], list):
-        result_payload["notes"].append("generate_answers_for_run will be removed in a future release; use enrich_and_generate_answers instead.")
-    else:
-        result_payload["notes"] = [
-            result_payload["notes"],
-            "generate_answers_for_run will be removed in a future release; use enrich_and_generate_answers instead."
-        ]
-    result_payload.setdefault("message", delegated.result.get("message") if isinstance(delegated.result, dict) else None)
-    result_payload["run_id"] = run_id
-    
-    return Response(result=result_payload)
+    # Copy fields from delegated response and add deprecation note
+    delegated.notes = list(delegated.notes) + [
+        "generate_answers_for_run will be removed in a future release; use enrich_and_generate_answers instead."
+    ]
+    delegated.run_id = run_id
+    return delegated
 
 
 @action
@@ -490,7 +483,7 @@ def reenrich_jobs(
     job_ids: Union[str, List[str], None] = None,
     run_id: Union[str, None] = None,
     force_regenerate: bool = True
-) -> Response:
+) -> EnrichmentResponse:
     """
     Regenerate AI enrichments and form answers for existing database jobs using updated prompts or model settings. Useful after prompt changes or for low-confidence jobs.
     
@@ -512,10 +505,11 @@ def reenrich_jobs(
     
     try:
         if not job_ids and not run_id:
-            return Response(result={
-                "success": False,
-                "error": "Must provide either job_ids or run_id"
-            })
+            return EnrichmentResponse(
+                result="Must provide either job_ids or run_id",
+                error="Must provide either job_ids or run_id",
+                success=False,
+            )
         
         delegated = enrich_and_generate_answers(
             run_id=run_id,
@@ -526,34 +520,28 @@ def reenrich_jobs(
             force_answer_regeneration=force_regenerate
         )
         
-        payload = dict(delegated.result) if isinstance(delegated.result, dict) else {"result": delegated.result}
-        payload.setdefault("message", "Re-enrichment complete.")
-        payload.setdefault("notes", [])
-        if isinstance(payload["notes"], list):
-            payload["notes"].append("reenrich_jobs delegates to enrich_and_generate_answers with force_reprocess=True.")
-        else:
-            payload["notes"] = [
-                payload["notes"],
-                "reenrich_jobs delegates to enrich_and_generate_answers with force_reprocess=True."
-            ]
-        payload["force_regenerate"] = force_regenerate
-        payload["job_ids"] = job_ids
-        payload["run_id"] = run_id
-        
-        return Response(result=payload)
+        # Augment the delegated response with reenrich-specific fields
+        delegated.notes = list(delegated.notes) + [
+            "reenrich_jobs delegates to enrich_and_generate_answers with force_reprocess=True."
+        ]
+        delegated.force_regenerate = force_regenerate
+        delegated.job_ids = job_ids if isinstance(job_ids, list) else ([job_ids] if job_ids else None)
+        delegated.run_id = run_id
+        return delegated
         
     except Exception as e:
         print(f"[ACTION] Error in reenrich_jobs: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return EnrichmentResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+        )
 
 
 @action
-def check_which_jobs_ready() -> Response:
+def check_which_jobs_ready() -> JobReadyResponse:
     """Check which jobs have AI-generated answers ready and are good fits.
     
     Returns a list of job_ids that:
@@ -601,30 +589,29 @@ def check_which_jobs_ready() -> Response:
         # Get jobs ready to apply (the actual list)
         job_ids = get_jobs_with_enriched_answers()
         
-        return Response(result={
-            "job_ids_ready": job_ids,
-            "count": len(job_ids),
-            "filtering_stats": {
+        return JobReadyResponse(
+            result=f"Found {len(job_ids)} jobs ready for application (filtered out {already_applied} already applied, {bad_fit_jobs} bad fits)",
+            job_ids_ready=job_ids,
+            count=len(job_ids),
+            filtering_stats={
                 "total_with_answers": total_with_answers,
                 "already_applied": already_applied,
                 "bad_fit_filtered": bad_fit_jobs,
                 "ready_to_apply": len(job_ids)
             },
-            "message": f"Found {len(job_ids)} jobs ready for application (filtered out {already_applied} already applied, {bad_fit_jobs} bad fits)"
-        })
+        )
     except Exception as e:
         print(f"[ACTION] Error in check_which_jobs_ready: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "job_ids_ready": [],
-            "count": 0,
-            "error": str(e)
-        })
+        return JobReadyResponse(
+            result=str(e),
+            error=str(e),
+        )
 
 
 @action
-def get_job_fit_analysis(run_id: Union[str, None] = None) -> Response:
+def get_job_fit_analysis(run_id: Union[str, None] = None) -> FitAnalysisResponse:
     """
     Get job-to-profile fit analysis results. Returns statistics on how jobs match your profile, including good fits (ready to apply) and bad fits (filtered out).
     
@@ -648,11 +635,12 @@ def get_job_fit_analysis(run_id: Union[str, None] = None) -> Response:
         summary = get_fit_summary(run_id)
         
         if not summary or summary.get('total_jobs', 0) == 0:
-            return Response(result={
-                "success": False,
-                "error": f"No jobs found{f' for run_id: {run_id}' if run_id else ''}",
-                "run_id": run_id
-            })
+            return FitAnalysisResponse(
+                result=f"No jobs found{f' for run_id: {run_id}' if run_id else ''}",
+                error=f"No jobs found{f' for run_id: {run_id}' if run_id else ''}",
+                success=False,
+                run_id=run_id,
+            )
         
         # Get good fit jobs (top 20)
         good_fits = get_good_fit_jobs(run_id=run_id, limit=20)
@@ -679,23 +667,24 @@ def get_job_fit_analysis(run_id: Union[str, None] = None) -> Response:
             for job in bad_fits[:5]:
                 print(f"  • {job['title']} @ {job['company']} (score: {job['fit_score']:.2f})")
         
-        return Response(result={
-            "success": True,
-            "run_id": run_id,
-            "summary": summary,
-            "good_fits_sample": good_fits[:20],  # Top 20 good fits
-            "bad_fits_sample": bad_fits[:10],    # Top 10 bad fits for review
-            "message": f"Found {summary['good_fits']} good fit jobs out of {summary['total_jobs']} total jobs ({summary['good_fit_rate']*100:.1f}% pass rate)"
-        })
+        return FitAnalysisResponse(
+            result=f"Found {summary['good_fits']} good fit jobs out of {summary['total_jobs']} total jobs ({summary['good_fit_rate']*100:.1f}% pass rate)",
+            success=True,
+            run_id=run_id,
+            summary=summary,
+            good_fits_sample=good_fits[:20],
+            bad_fits_sample=bad_fits[:10],
+        )
         
     except Exception as e:
         print(f"[ACTION] Error in get_job_fit_analysis: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return FitAnalysisResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+        )
 
 
 @action(is_consequential=True)
@@ -703,7 +692,7 @@ def update_job_fit_status(
     job_ids: List[str],
     mark_as_good_fit: bool = True,
     fit_score: Optional[float] = None
-) -> Response:
+) -> FitStatusUpdateResponse:
     """Manually set jobs as good or bad fits and optionally set a fit score.
 
     Args:
@@ -724,10 +713,11 @@ def update_job_fit_status(
         
         # Validate inputs
         if not job_ids:
-            return Response(result={
-                "success": False,
-                "error": "No job_ids provided. Please provide at least one job ID."
-            })
+            return FitStatusUpdateResponse(
+                result="No job_ids provided.",
+                error="No job_ids provided. Please provide at least one job ID.",
+                success=False,
+            )
         
         # Set default fit_score if not provided
         if fit_score is None:
@@ -735,10 +725,11 @@ def update_job_fit_status(
         
         # Validate fit_score range
         if not (0.0 <= fit_score <= 1.0):
-            return Response(result={
-                "success": False,
-                "error": f"fit_score must be between 0.0 and 1.0, got {fit_score}"
-            })
+            return FitStatusUpdateResponse(
+                result=f"fit_score must be between 0.0 and 1.0, got {fit_score}",
+                error=f"fit_score must be between 0.0 and 1.0, got {fit_score}",
+                success=False,
+            )
         
         # Update database
         result = update_job_fit_analysis(
@@ -767,36 +758,37 @@ def update_job_fit_status(
                 except Exception as e:
                     print(f"[ACTION] Could not verify update: {e}")
             
-            return Response(result={
-                "success": True,
-                "message": f"Successfully updated {updated_count} job(s)",
-                "updated_count": updated_count,
-                "requested_job_count": len(job_ids),
-                "changes_applied": {
+            return FitStatusUpdateResponse(
+                result=f"Successfully updated {updated_count} job(s)",
+                success=True,
+                updated_count=updated_count,
+                requested_job_count=len(job_ids),
+                changes_applied={
                     "good_fit": mark_as_good_fit,
                     "fit_score": fit_score
                 },
-                "job_ids": job_ids,
-                "verification_sample": verification,
-                "next_steps": (
+                job_ids=job_ids,
+                verification_sample=verification,
+                next_steps=(
                     "Jobs are now marked as good fits and ready for application. "
                     "Use check_which_jobs_ready() to see all jobs ready to apply."
                 ) if mark_as_good_fit else (
                     "Jobs are now marked as bad fits and filtered out from applications."
-                )
-            })
+                ),
+            )
         else:
-            return Response(result={
-                "success": False,
-                "error": result.get("error", "Unknown error during update"),
-                "updated_count": 0
-            })
+            return FitStatusUpdateResponse(
+                result=result.get("error", "Unknown error during update"),
+                error=result.get("error", "Unknown error during update"),
+                success=False,
+            )
             
     except Exception as e:
         print(f"[ACTION] Error in update_job_fit_status: {e}")
         import traceback
         print(f"[ACTION] Full traceback: {traceback.format_exc()}")
-        return Response(result={
-            "success": False,
-            "error": str(e)
-        })
+        return FitStatusUpdateResponse(
+            result=str(e),
+            error=str(e),
+            success=False,
+        )

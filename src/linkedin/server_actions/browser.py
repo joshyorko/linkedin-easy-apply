@@ -1,4 +1,6 @@
-from sema4ai.actions import ActionError, Response, action
+from sema4ai.actions import ActionError, action
+
+from ..utils.responses import BrowserContextResponse
 from robocorp import browser
 import dotenv
 import os
@@ -24,7 +26,7 @@ LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD")
 @action
 def set_browser_context(
     headless_mode: bool = True
-) -> Response:
+) -> BrowserContextResponse:
     """Logs into LinkedIn and returns a Response indicating login success.
     
     Args:
@@ -143,11 +145,12 @@ def set_browser_context(
             )
             log_section_end("LinkedIn Login", "✅")
             page.close()
-            return Response(result={
-                "success": True,
-                "message": "LinkedIn login successful.",
-                "log_file": f"./output/{run_id}/log.html",
-            })
+            return BrowserContextResponse(
+                result="LinkedIn login successful.",
+                success=True,
+                status="success",
+                log_file=f"./output/{run_id}/log.html",
+            )
 
         # Check if we landed on verification/additional auth pages
         page_content = ""
@@ -196,12 +199,12 @@ def set_browser_context(
 
             log_section_end("LinkedIn Login", "⚠️")
             page.close()
-            return Response(result={
-                "status": "verification_required",
-                "message": warning_msg,
-                "current_url": page.url,
-                "log_file": f"./output/{run_id}/log.html",
-            })
+            return BrowserContextResponse(
+                result=warning_msg,
+                status="verification_required",
+                current_url=page.url,
+                log_file=f"./output/{run_id}/log.html",
+            )
 
         # Unclear state - return info for debugging
         log_warning(
@@ -212,12 +215,12 @@ def set_browser_context(
         )
         log_section_end("LinkedIn Login", "❓")
         page.close()
-        return Response(result={
-            "status": "uncertain",
-            "message": f"Login completed but landed on unexpected page: {page.url}",
-            "recommendation": "Verify login state by checking the current URL or running in non-headless mode.",
-            "log_file": f"./output/{run_id}/log.html",
-        })
+        return BrowserContextResponse(
+            result=f"Login completed but landed on unexpected page: {page.url}",
+            status="uncertain",
+            recommendation="Verify login state by checking the current URL or running in non-headless mode.",
+            log_file=f"./output/{run_id}/log.html",
+        )
     
     except ActionError as e:
         # ActionError already logged above, just re-raise

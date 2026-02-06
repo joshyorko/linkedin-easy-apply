@@ -4,7 +4,7 @@ One-off job application action.
 Directly navigates to a LinkedIn job URL/ID, scrapes the Easy Apply form,
 generates answers with LLM, and applies immediately.
 """
-from sema4ai.actions import Response, action
+from sema4ai.actions import action
 from robocorp import browser
 import dotenv
 import os
@@ -30,6 +30,7 @@ from ..utils.robolog_screenshots import (
     log_success, log_warning, log_error,
     log_metric
 )
+from ..utils.responses import OneoffApplyResponse
 
 # Initialize logger
 log = get_logger(__name__)
@@ -139,7 +140,7 @@ def apply_to_job_by_url(
     job_url: str,
     headless: bool = True,
     allow_submit: bool = False
-) -> Response:
+) -> OneoffApplyResponse:
     """Open a LinkedIn job by URL/ID, scrape Easy Apply, generate answers, and
     optionally submit.
 
@@ -176,11 +177,11 @@ def apply_to_job_by_url(
                 details=f"Provided: {job_url}",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": f"Could not extract job ID from: {job_url}",
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return OneoffApplyResponse(
+                result=f"Could not extract job ID from: {job_url}",
+                error=f"Could not extract job ID from: {job_url}",
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         log.info(f"Extracted job ID: {job_id}")
         
@@ -192,11 +193,11 @@ def apply_to_job_by_url(
                 details="Run parse_resume_and_save_profile() first",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": "No user profile found. Run parse_resume_and_save_profile() first.",
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return OneoffApplyResponse(
+                result="No user profile found. Run parse_resume_and_save_profile() first.",
+                error="No user profile found. Run parse_resume_and_save_profile() first.",
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         log.info("Configuring browser and ensuring login...")
         # Configure browser
@@ -218,12 +219,12 @@ def apply_to_job_by_url(
                 screenshot=True,
                 screenshot_name="navigation_failed"
             )
-            return Response(result={
-                "success": False,
-                "error": f"Failed to navigate to job page: {e}",
-                "job_id": job_id,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return OneoffApplyResponse(
+                result=f"Failed to navigate to job page: {e}",
+                error=str(e),
+                job_id=job_id,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Scrape basic job details first (for database)
         log.info("Scraping job details...")
@@ -252,15 +253,15 @@ def apply_to_job_by_url(
                 except Exception as e:
                     log.warn(f"Could not save job to database: {e}")
                 
-                return Response(result={
-                    "success": False,
-                    "error": "Job does not have Easy Apply",
-                    "job_id": job_id,
-                    "job_title": job_data.get("title"),
-                    "company": job_data.get("company"),
-                    "easy_apply": False,
-                    "log_file": f"./output/{run_id}/log.html"
-                })
+                return OneoffApplyResponse(
+                    result="Job does not have Easy Apply",
+                    error="Job does not have Easy Apply",
+                    job_id=job_id,
+                    job_title=job_data.get("title"),
+                    company=job_data.get("company"),
+                    easy_apply=False,
+                    log_file=f"./output/{run_id}/log.html"
+                )
             
             if not form_snapshot.get('questions_json'):
                 log_error(
@@ -278,15 +279,15 @@ def apply_to_job_by_url(
                 except Exception as e:
                     log.warn(f"Could not save job to database: {e}")
                 
-                return Response(result={
-                    "success": False,
-                    "error": "Easy Apply form opened but no questions found",
-                    "job_id": job_id,
-                    "job_title": job_data.get("title"),
-                    "company": job_data.get("company"),
-                    "easy_apply": True,
-                    "log_file": f"./output/{run_id}/log.html"
-                })
+                return OneoffApplyResponse(
+                    result="Easy Apply form opened but no questions found",
+                    error="Easy Apply form opened but no questions found",
+                    job_id=job_id,
+                    job_title=job_data.get("title"),
+                    company=job_data.get("company"),
+                    easy_apply=True,
+                    log_file=f"./output/{run_id}/log.html"
+                )
             
             questions = form_snapshot.get('questions_json', [])
             log_success(f"Scraped {len(questions)} form fields", screenshot=False)
@@ -310,14 +311,14 @@ def apply_to_job_by_url(
             except Exception as e:
                 log.warn(f"Could not save job to database: {e}")
             
-            return Response(result={
-                "success": False,
-                "error": f"Error scraping form: {e}",
-                "job_id": job_id,
-                "job_title": job_data.get("title"),
-                "company": job_data.get("company"),
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return OneoffApplyResponse(
+                result=f"Error scraping form: {e}",
+                error=str(e),
+                job_id=job_id,
+                job_title=job_data.get("title"),
+                company=job_data.get("company"),
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Generate answers with LLM
         log.info("Generating form answers with LLM...")
@@ -342,14 +343,14 @@ def apply_to_job_by_url(
                 except Exception as e:
                     log.warn(f"Could not save job to database: {e}")
                 
-                return Response(result={
-                    "success": False,
-                    "error": "LLM failed to generate answers",
-                    "job_id": job_id,
-                    "job_title": job_data.get("title"),
-                    "company": job_data.get("company"),
-                    "log_file": f"./output/{run_id}/log.html"
-                })
+                return OneoffApplyResponse(
+                    result="LLM failed to generate answers",
+                    error="LLM failed to generate answers",
+                    job_id=job_id,
+                    job_title=job_data.get("title"),
+                    company=job_data.get("company"),
+                    log_file=f"./output/{run_id}/log.html"
+                )
             
             answers = form_answers.answers
             confidence = form_answers.confidence or 0.0
@@ -374,14 +375,14 @@ def apply_to_job_by_url(
             except Exception as e:
                 log.warn(f"Could not save job to database: {e}")
             
-            return Response(result={
-                "success": False,
-                "error": f"Error generating answers: {e}",
-                "job_id": job_id,
-                "job_title": job_data.get("title"),
-                "company": job_data.get("company"),
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return OneoffApplyResponse(
+                result=f"Error generating answers: {e}",
+                error=str(e),
+                job_id=job_id,
+                job_title=job_data.get("title"),
+                company=job_data.get("company"),
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Save job to database before applying
         job_data["run_id"] = run_id
@@ -458,23 +459,29 @@ def apply_to_job_by_url(
         log_section_end("One-off Application", "✅" if apply_result.get("success") else "❌")
         page.close()
         
-        return Response(result={
-            "success": apply_result.get("success"),
-            "job_id": job_id,
-            "job_title": job_data.get('title'),
-            "company": job_data.get('company'),
-            "submitted": apply_result.get("submitted"),
-            "allow_submit": allow_submit,
-            "steps_completed": apply_result.get("steps_completed"),
-            "fields_filled": apply_result.get("fields_filled"),
-            "reached_submit": apply_result.get("reached_submit"),
-            "questions_scraped": len(questions),
-            "answers_generated": len(answers),
-            "confidence": confidence,
-            "saved_to_database": True,
-            "error": apply_result.get("error"),
-            "log_file": f"./output/{run_id}/log.html"
-        })
+        result_msg = (
+            f"Applied to {job_data.get('title')} at {job_data.get('company')}"
+            if apply_result.get("success")
+            else f"Application failed: {apply_result.get('error', 'Unknown error')}"
+        )
+        return OneoffApplyResponse(
+            result=result_msg,
+            error=apply_result.get("error"),
+            success=apply_result.get("success", False),
+            job_id=job_id,
+            job_title=job_data.get('title'),
+            company=job_data.get('company'),
+            submitted=apply_result.get("submitted"),
+            allow_submit=allow_submit,
+            steps_completed=apply_result.get("steps_completed"),
+            fields_filled=apply_result.get("fields_filled"),
+            reached_submit=apply_result.get("reached_submit"),
+            questions_scraped=len(questions),
+            answers_generated=len(answers),
+            confidence=confidence,
+            saved_to_database=True,
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     except Exception as e:
         log_error(
@@ -490,12 +497,11 @@ def apply_to_job_by_url(
         except:
             pass
         
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "job_url": job_url,
-            "log_file": f"./output/{run_id}/log.html"
-        })
+        return OneoffApplyResponse(
+            result=f"Unexpected error during one-off application: {e}",
+            error=str(e),
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     finally:
         cleanup_logging()

@@ -1,4 +1,5 @@
-from sema4ai.actions import Response, action
+from sema4ai.actions import action
+from ..utils.responses import ApplyJobResponse, BatchApplyResponse
 from robocorp import browser
 import dotenv
 import os
@@ -45,7 +46,7 @@ def apply_to_single_job(
     job_id: str,
     headless: bool = True,
     allow_submit: bool = False
-) -> Response:
+) -> ApplyJobResponse:
     """Apply to a single LinkedIn Easy Apply job using data from database.
     
     Queries the database for job details, profile, and AI-generated answers,
@@ -81,12 +82,13 @@ def apply_to_single_job(
                 details=f"Job ID: {job_id}",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": f"Job {job_id} not found in database",
-                "job_id": job_id,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ApplyJobResponse(
+                result=f"Job {job_id} not found in database",
+                error=f"Job {job_id} not found in database",
+                success=False,
+                job_id=job_id,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Check if Easy Apply job
         if not job.get('easy_apply'):
@@ -95,12 +97,13 @@ def apply_to_single_job(
                 details=f"Job: {job.get('title')} at {job.get('company')}",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": "Job is not an Easy Apply job",
-                "job_id": job_id,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ApplyJobResponse(
+                result="Job is not an Easy Apply job",
+                error="Job is not an Easy Apply job",
+                success=False,
+                job_id=job_id,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Check if job is a good fit (if fit analysis was done)
         if job.get('good_fit') is False:
@@ -110,16 +113,17 @@ def apply_to_single_job(
                 details=f"{job.get('title')} at {job.get('company')} - Fit score: {fit_score:.2f}",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": f"Job is not a good fit for your profile (fit_score: {fit_score:.2f})",
-                "job_id": job_id,
-                "job_title": job.get('title'),
-                "company": job.get('company'),
-                "good_fit": False,
-                "fit_score": fit_score,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ApplyJobResponse(
+                result=f"Job is not a good fit for your profile (fit_score: {fit_score:.2f})",
+                error=f"Job is not a good fit for your profile (fit_score: {fit_score:.2f})",
+                success=False,
+                job_id=job_id,
+                job_title=job.get('title'),
+                company=job.get('company'),
+                good_fit=False,
+                fit_score=fit_score,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Get job URL
         job_url = job.get('job_url')
@@ -129,12 +133,13 @@ def apply_to_single_job(
                 details=f"Job {job_id} has no job_url in database",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": "Job URL not found",
-                "job_id": job_id,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ApplyJobResponse(
+                result="Job URL not found",
+                error="Job URL not found",
+                success=False,
+                job_id=job_id,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Load profile
         profile = _load_profile()
@@ -144,12 +149,13 @@ def apply_to_single_job(
                 details="Run parse_resume_and_save_profile() first",
                 screenshot=False
             )
-            return Response(result={
-                "success": False,
-                "error": "No user profile found. Run parse_resume_and_save_profile() first.",
-                "job_id": job_id,
-                "log_file": f"./output/{run_id}/log.html"
-            })
+            return ApplyJobResponse(
+                result="No user profile found. Run parse_resume_and_save_profile() first.",
+                error="No user profile found. Run parse_resume_and_save_profile() first.",
+                success=False,
+                job_id=job_id,
+                log_file=f"./output/{run_id}/log.html"
+            )
         
         # Get answers from enriched_answers table
         enriched = get_enriched_answers(job_id)
@@ -248,22 +254,29 @@ def apply_to_single_job(
         log_section_end("Job Application", "✅" if apply_result.get("success") else "❌")
         page.close()
         
-        return Response(result={
-            "success": apply_result.get("success"),
-            "job_id": job_id,
-            "job_title": job.get('title'),
-            "company": job.get('company'),
-            "submitted": apply_result.get("submitted"),
-            "verified": apply_result.get("verified"),
-            "verification_message": verification_message,
-            "allow_submit": allow_submit,
-            "steps_completed": apply_result.get("steps_completed"),
-            "fields_filled": apply_result.get("fields_filled"),
-            "reached_submit": apply_result.get("reached_submit"),
-            "used_enriched_answers": enriched is not None,
-            "error": apply_result.get("error"),
-            "log_file": f"./output/{run_id}/log.html"
-        })
+        result_msg = (
+            f"Application {'submitted' if apply_result.get('submitted') and allow_submit else 'dry-run completed'}"
+            f" for {job.get('title')} at {job.get('company')}"
+            if apply_result.get("success")
+            else apply_result.get("error", "Application failed")
+        )
+        return ApplyJobResponse(
+            result=result_msg,
+            error=apply_result.get("error"),
+            success=apply_result.get("success", False),
+            job_id=job_id,
+            job_title=job.get('title'),
+            company=job.get('company'),
+            submitted=apply_result.get("submitted"),
+            verified=apply_result.get("verified"),
+            verification_message=verification_message,
+            allow_submit=allow_submit,
+            steps_completed=apply_result.get("steps_completed"),
+            fields_filled=apply_result.get("fields_filled"),
+            reached_submit=apply_result.get("reached_submit"),
+            used_enriched_answers=enriched is not None,
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     except Exception as e:
         log_error(
@@ -279,12 +292,13 @@ def apply_to_single_job(
         except:
             pass
         
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "job_id": job_id,
-            "log_file": f"./output/{run_id}/log.html"
-        })
+        return ApplyJobResponse(
+            result=f"Application failed with unexpected error: {e}",
+            error=str(e),
+            success=False,
+            job_id=job_id,
+            log_file=f"./output/{run_id}/log.html"
+        )
     
     finally:
         cleanup_logging()
@@ -296,7 +310,7 @@ def batch_apply_by_run_id(
     headless: bool = True,
     allow_submit: bool = False,
     max_applications: int = 10
-) -> Response:
+) -> BatchApplyResponse:
     """Batch apply to Easy Apply jobs from a search run. Queries database and automatically applies to each job using AI-generated answers.
     
     Args:
@@ -340,14 +354,14 @@ def batch_apply_by_run_id(
         print(f"[ACTION] Found {len(jobs_with_answers)} Easy Apply jobs with enriched answers")
         
         if not jobs_with_answers:
-            return Response(result={
-                "success": False,
-                "message": "No Easy Apply jobs with enriched answers found. Run generate_answers_for_run() first.",
-                "run_id": run_id,
-                "applied": 0,
-                "skipped": 0,
-                "failed": 0
-            })
+            return BatchApplyResponse(
+                result="No Easy Apply jobs with enriched answers found. Run generate_answers_for_run() first.",
+                success=False,
+                run_id=run_id,
+                applied=0,
+                skipped=0,
+                failed=0
+            )
         
         # Sort jobs by priority: recency + fit score
         # Priority: good_fit first, then by date_posted (newest first), then by fit_score
@@ -387,11 +401,12 @@ def batch_apply_by_run_id(
         # Load profile
         profile = _load_profile()
         if not profile:
-            return Response(result={
-                "success": False,
-                "error": "No user profile found. Run parse_resume_and_save_profile() first.",
-                "run_id": run_id
-            })
+            return BatchApplyResponse(
+                result="No user profile found. Run parse_resume_and_save_profile() first.",
+                error="No user profile found. Run parse_resume_and_save_profile() first.",
+                success=False,
+                run_id=run_id
+            )
         
         # Configure browser ONCE for all applications
         configure_browser(headless_mode=headless)
@@ -506,17 +521,17 @@ def batch_apply_by_run_id(
         except:
             pass
         
-        return Response(result={
-            "success": True,
-            "message": f"Batch apply complete: {applied} applied, {skipped} skipped, {failed} failed",
-            "run_id": run_id,
-            "total_jobs": len(jobs_to_apply),
-            "applied": applied,
-            "skipped": skipped,
-            "failed": failed,
-            "submitted": allow_submit,
-            "results": results
-        })
+        return BatchApplyResponse(
+            result=f"Batch apply complete: {applied} applied, {skipped} skipped, {failed} failed",
+            success=True,
+            run_id=run_id,
+            total_jobs=len(jobs_to_apply),
+            applied=applied,
+            skipped=skipped,
+            failed=failed,
+            submitted=allow_submit,
+            results=results
+        )
         
     except Exception as e:
         print(f"[ACTION] Error in batch_apply_by_run_id: {e}")
@@ -529,11 +544,12 @@ def batch_apply_by_run_id(
         except:
             pass
         
-        return Response(result={
-            "success": False,
-            "error": str(e),
-            "run_id": run_id,
-            "applied": 0,
-            "skipped": 0,
-            "failed": 0
-        })
+        return BatchApplyResponse(
+            result=f"Batch apply failed with unexpected error: {e}",
+            error=str(e),
+            success=False,
+            run_id=run_id,
+            applied=0,
+            skipped=0,
+            failed=0
+        )
