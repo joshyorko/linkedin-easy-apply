@@ -37,7 +37,7 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       # Server URL for OAuth2 redirect (REQUIRED for tunnel/proxy setup)
-      - SERVER_URL=https://linkedin-easy-apply-actions.joshyorko.com
+      - SERVER_URL=http://localhost:8080
     depends_on:
       postgres:
         condition: service_healthy

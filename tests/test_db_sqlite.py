@@ -4,13 +4,9 @@ Test suite for SQLite database backend.
 Tests all database functions to ensure compatibility with the SQLite implementation.
 """
 import os
-import sys
 import pytest
 import tempfile
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Set environment to use SQLite before importing db module
 os.environ["DB_BACKEND"] = "sqlite"

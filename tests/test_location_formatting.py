@@ -11,7 +11,7 @@ if "robocorp" not in sys.modules:
     sys.modules["robocorp"] = robocorp_stub
     sys.modules["robocorp.browser"] = browser_stub
 
-from src.linkedin.utils.apply_tools import (
+from linkedin.utils.apply_tools import (
     _desired_location_strings,
     _location_value_matches,
     _prepare_location_context,

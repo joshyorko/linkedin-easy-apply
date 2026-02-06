@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ADD https://cdn.sema4.ai/action-server/releases/latest/linux64/action-server /usr/local/bin/action-server
+ADD https://github.com/joshyorko/actions/releases/download/action-server-v1.2.2/action-server-linux64 /usr/local/bin/action-server
 RUN chmod +x /usr/local/bin/action-server
 
 FROM debian:bookworm-slim AS runtime

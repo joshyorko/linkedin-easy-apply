@@ -32,24 +32,26 @@ dependencies:
     - Pillow=12.0.0
     - psycopg2-binary=2.9.11
 
-#post-install:
-#  - playwright install chromium
-
-#dev-dependencies:
-#  conda-forge:
-#    - pytest=8.3.5
-#    - types-requests=2.32.0.20250301
-#    - ruff=0.11.12
-#    - mypy=1.16.0
-
-#dev-tasks:
-#  test: pytest tests
-#  lint: |
-#    ruff check src tests
-#    ruff format --check src tests
-#  typecheck: mypy --follow-imports=silent --strict src tests
-#  prettify: |
-#    ruff format src tests
+post-install:
+  - playwright install chromium
+dev-dependencies:
+  conda-forge:
+    - pytest=8.3.5
+    - pytest-cov=6.1.1
+    - types-requests=2.32.0.20250301
+    - ruff=0.11.12
+    - mypy=1.16.0
+dev-tasks:
+  test: pytest tests -v
+  test-cov: pytest tests -v --cov=linkedin --cov-report=term-missing
+  test-db: pytest tests/test_db_sqlite.py tests/test_db_helpers.py -v
+  test-location: pytest tests/test_location_formatting.py -v
+  lint: |
+    ruff check src tests
+    ruff format --check src tests
+  typecheck: mypy --follow-imports=silent --strict src tests
+  prettify: |
+    ruff format src tests
 
 packaging:
   # By default, all files and folders in this directory are packaged when uploaded.
