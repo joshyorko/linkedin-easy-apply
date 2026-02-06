@@ -134,7 +134,7 @@ def _generate_answers_for_job(
         # Save to enriched_answers table
         if form_answers.answers:
             profile_id = profile.get('profile_id') or str(uuid.uuid4())
-            answers_dict = form_answers.answers
+            answers_dict = form_answers.answers_dict
             save_enriched_answers(
                 job_id=job_id,
                 answers=answers_dict,

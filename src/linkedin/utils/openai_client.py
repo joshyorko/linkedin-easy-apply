@@ -1,10 +1,10 @@
 """
 OpenAI client for enriching LinkedIn job data and generating Easy Apply form answers.
 
-This module provides integration with OpenAI Python SDK to:
-1. Validate and refine scraped job data before database insertion
-2. Generate personalized answers for Easy Apply forms
-3. Use Structured Outputs for reliable JSON responses
+Uses the non-beta structured outputs API (client.chat.completions.parse)
+with Pydantic models for guaranteed schema conformance.
+
+Supports GPT-5 family parameters: reasoning_effort, verbosity.
 """
 from __future__ import annotations
 
@@ -41,263 +41,204 @@ class JobEnrichment(BaseModel):
     location_state: Optional[str] = None
     location_country: Optional[str] = None
     location_type: Optional[str] = None  # Remote, Hybrid, On-site
-    
+
     # Extracted/inferred fields
     experience_level: Optional[str] = None  # Entry level, Mid-Senior, Executive
     seniority_level: Optional[str] = None
     required_skills: List[str] = Field(default_factory=list)
     job_function: Optional[str] = None  # Engineering, Sales, Marketing
     employment_type: Optional[str] = None  # Full-time, Part-time, Contract
-    
+
     # Compensation (if mentioned)
     salary_range: Optional[str] = None
-    
+
     # Confidence scores
     confidence_score: float = 1.0  # 0.0-1.0 confidence in enrichment quality
     needs_manual_review: bool = False
-    
+
     # Job fit analysis (based on user profile)
     good_fit: bool = False  # Should user apply to this job?
     fit_score: float = 0.0  # 0.0-1.0 how well job matches user's skills/experience
     fit_reasoning: Optional[str] = None  # Why is this a good/bad fit?
 
 
-class FormAnswers(BaseModel):
-    """Structured output model for Easy Apply form answers.
-    
-    Note: Using Optional fields to ensure OpenAI structured outputs compatibility.
+class FormAnswer(BaseModel):
+    """A single form field answer (strict structured outputs compatible)."""
+    field_id: str
+    value: str
+
+
+class _FormAnswersSchema(BaseModel):
+    """API response schema for OpenAI structured outputs.
+
+    Uses List[FormAnswer] instead of Dict[str, str] because OpenAI strict
+    structured outputs requires additionalProperties: false, which is
+    incompatible with arbitrary-key dicts.
+
+    This model is used ONLY as the response_format for the API call.
+    Token usage fields are excluded — they are metadata set after the call.
     """
-    answers: Optional[Dict[str, str]] = Field(default_factory=dict)  # field_id/name -> answer value
-    confidence: Optional[float] = 1.0  # Overall confidence in answers
-    unanswered_fields: Optional[List[str]] = Field(default_factory=list)  # Fields that couldn't be answered
-    
-    # Token usage (set externally after API call)
+    answers: List[FormAnswer] = Field(default_factory=list)
+    confidence: float = 1.0
+    unanswered_fields: List[str] = Field(default_factory=list)
+
+
+class FormAnswers(BaseModel):
+    """Internal model for Easy Apply form answers with token tracking."""
+    answers: List[FormAnswer] = Field(default_factory=list)
+    confidence: float = 1.0
+    unanswered_fields: List[str] = Field(default_factory=list)
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
+
+    @property
+    def answers_dict(self) -> Dict[str, str]:
+        """Convert answer list to dict for downstream compatibility."""
+        return {a.field_id: a.value for a in self.answers}
 
 
 class OpenAIClient:
     """Client for interacting with OpenAI for LinkedIn job enrichment and form answering."""
-    
+
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        """Initialize OpenAI client.
-        
-        Args:
-            api_key: OpenAI API key (defaults to env OPENAI_API_KEY)
-            model: Model to use (defaults to gpt-4o-mini for cost efficiency)
-        """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
                 "OpenAI API key required. Set OPENAI_API_KEY environment variable "
                 "or pass api_key parameter."
             )
-        
-        # Use gpt-4o-mini by default (cost-effective, supports structured outputs)
-        # User can override to gpt-4o for better quality if needed
+
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        
         self.client = OpenAI(api_key=self.api_key)
         logger.info(f"[OpenAI] Initialized client with model: {self.model}")
-    
+
+    def _build_api_params(
+        self,
+        messages: List[Dict[str, str]],
+        response_format,
+        verbosity: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build common API params with optional GPT-5 parameters."""
+        params: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "response_format": response_format,
+        }
+        reasoning_effort = get_reasoning_effort_for_model(self.model)
+        if reasoning_effort:
+            params["reasoning_effort"] = reasoning_effort
+        if verbosity:
+            params["verbosity"] = verbosity
+        return params
+
+    def _parse_completion(self, completion, fallback):
+        """Extract parsed result from completion, handling refusals."""
+        if not getattr(completion, "choices", None) or len(completion.choices) == 0:
+            logger.error("[OpenAI] No choices returned from completion")
+            return fallback
+
+        message = completion.choices[0].message
+
+        # Check for model refusal before accessing parsed
+        if getattr(message, "refusal", None):
+            logger.error(f"[OpenAI] Model refused: {message.refusal}")
+            return fallback
+
+        parsed = getattr(message, "parsed", None)
+        if parsed is None:
+            logger.error("[OpenAI] Received None from structured output parsing")
+            return fallback
+
+        # Log token usage
+        usage = getattr(completion, "usage", None)
+        if usage:
+            logger.info(
+                f"[OpenAI] Tokens: {usage.prompt_tokens} prompt + {usage.completion_tokens} completion"
+            )
+
+        return parsed
+
     def enrich_job_data(self, raw_job_data: Dict[str, Any], user_profile: Optional[Dict[str, Any]] = None) -> JobEnrichment:
-        """
-        Refine and validate scraped job data using OpenAI structured outputs.
-        
-        This cleans up inconsistent data, extracts missing fields from job description,
-        and validates the data before database insertion.
-        
-        Args:
-            raw_job_data: Dictionary containing scraped job data
-            user_profile: Optional user profile for fit analysis
-            
-        Returns:
-            JobEnrichment object with validated and enriched data (including fit analysis if profile provided)
-        """
+        """Enrich scraped job data and perform fit analysis using structured outputs."""
+        fallback = JobEnrichment(
+            title=raw_job_data.get("title", ""),
+            company=raw_job_data.get("company", ""),
+            confidence_score=0.0,
+            needs_manual_review=True,
+        )
         try:
-            # Build prompt using centralized prompt builder
             prompt = build_job_enrichment_prompt(raw_job_data, user_profile or {})
-            
-            # Use structured outputs for reliable parsing
-            # Add reasoning_effort for GPT-5 models to improve complex reasoning
-            api_params = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": JOB_ENRICHMENT_SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+            api_params = self._build_api_params(
+                messages=[
+                    {"role": "system", "content": JOB_ENRICHMENT_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
                 ],
-                "response_format": JobEnrichment,
-            }
-            
-            # Add reasoning_effort for GPT-5 reasoning models
-            reasoning_effort = get_reasoning_effort_for_model(self.model)
-            if reasoning_effort:
-                api_params["reasoning_effort"] = reasoning_effort
-            
-            completion = self.client.beta.chat.completions.parse(**api_params)
+                response_format=JobEnrichment,
+            )
 
-            # Defensive checks for SDK response shape
-            if not getattr(completion, "choices", None) or len(completion.choices) == 0:
-                logger.error("[OpenAI] No choices returned from completion")
-                return JobEnrichment(
-                    title=raw_job_data.get("title", ""),
-                    company=raw_job_data.get("company", ""),
-                    confidence_score=0.0,
-                    needs_manual_review=True
-                )
-
-            choice = completion.choices[0]
-            if not getattr(choice, "message", None):
-                logger.error("[OpenAI] Choice has no message")
-                return JobEnrichment(
-                    title=raw_job_data.get("title", ""),
-                    company=raw_job_data.get("company", ""),
-                    confidence_score=0.0,
-                    needs_manual_review=True
-                )
-
-            enrichment = getattr(choice.message, "parsed", None)
-            if enrichment is None:
-                logger.error("[OpenAI] Received None from structured output parsing")
-                return JobEnrichment(
-                    title=raw_job_data.get("title", ""),
-                    company=raw_job_data.get("company", ""),
-                    confidence_score=0.0,
-                    needs_manual_review=True
-                )
-
-            # Log token usage if present
-            usage = getattr(completion, "usage", None)
-            if usage:
-                try:
-                    logger.info(
-                        f"[OpenAI] Job enrichment tokens: {usage.prompt_tokens} prompt + {usage.completion_tokens} completion"
-                    )
-                except Exception:
-                    logger.debug("[OpenAI] Could not read usage fields from completion")
-
+            completion = self.client.chat.completions.parse(**api_params)
+            result = self._parse_completion(completion, fallback)
             logger.info(f"[OpenAI] Enriched job: {raw_job_data.get('job_id', 'unknown')}")
-            return enrichment
-            
+            return result
+
         except Exception as e:
             logger.error(f"[OpenAI] Job enrichment failed: {e}")
-            # Return minimal enrichment on error
-            return JobEnrichment(
-                title=raw_job_data.get("title", ""),
-                company=raw_job_data.get("company", ""),
-                confidence_score=0.0,
-                needs_manual_review=True
-            )
+            return fallback
     
     def generate_form_answers(
         self,
         questions_json: Union[str, List[Dict]],
         user_profile: Dict[str, Any],
-        job_context: Dict[str, Any]
+        job_context: Dict[str, Any],
     ) -> FormAnswers:
-        """
-        Generate personalized answers for LinkedIn Easy Apply form questions.
-        
-        Args:
-            questions_json: Form questions data (can be JSON string or parsed dict)
-            user_profile: User profile data (name, email, phone, skills, experience)
-            job_context: Job details (title, company, description) for context
-            
-        Returns:
-            FormAnswers object with generated answers
-        """
+        """Generate personalized answers for LinkedIn Easy Apply form questions."""
+        fallback = FormAnswers(answers=[], confidence=0.0, unanswered_fields=["Error: generation failed"])
         try:
-            # Parse questions if needed
             if isinstance(questions_json, str):
                 questions_data = json.loads(questions_json)
             else:
                 questions_data = questions_json
-            
-            # Build prompt using centralized prompt builder
+
             prompt = build_form_answering_prompt(
                 questions_data, user_profile, job_context
             )
-            
-            # Use structured outputs for reliable form answer generation
-            # Add reasoning_effort for GPT-5 models to handle complex/meta questions
-            api_params = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": FORM_ANSWERING_SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+
+            # Use _FormAnswersSchema (no token fields) as the API response format
+            api_params = self._build_api_params(
+                messages=[
+                    {"role": "system", "content": FORM_ANSWERING_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
                 ],
-                "response_format": FormAnswers,
-            }
-            
-            # Add reasoning_effort for GPT-5 reasoning models (critical for meta-questions)
-            reasoning_effort = get_reasoning_effort_for_model(self.model)
-            if reasoning_effort:
-                api_params["reasoning_effort"] = reasoning_effort
-            
-            completion = self.client.beta.chat.completions.parse(**api_params)
+                response_format=_FormAnswersSchema,
+                verbosity="low",
+            )
 
-            # Defensive handling of completion structure
-            if not getattr(completion, "choices", None) or len(completion.choices) == 0:
-                logger.error("[OpenAI] No choices returned from completion")
-                return FormAnswers(answers={}, confidence=0.0, unanswered_fields=["Error: No choices returned"])
+            completion = self.client.chat.completions.parse(**api_params)
+            schema_fallback = _FormAnswersSchema(answers=[], confidence=0.0, unanswered_fields=["Error: generation failed"])
+            parsed = self._parse_completion(completion, schema_fallback)
 
-            choice = completion.choices[0]
-            if not getattr(choice, "message", None):
-                logger.error("[OpenAI] Choice has no message")
-                return FormAnswers(answers={}, confidence=0.0, unanswered_fields=["Error: Choice missing message"])
+            if not isinstance(parsed, _FormAnswersSchema):
+                return fallback
 
-            raw_parsed = getattr(choice.message, "parsed", None)
-            if raw_parsed is None:
-                logger.error("[OpenAI] Received None from structured output parsing")
-                return FormAnswers(answers={}, confidence=0.0, unanswered_fields=["Error: Received None from API"])
-
-            # Ensure we have a FormAnswers instance
-            if isinstance(raw_parsed, FormAnswers):
-                answers_obj = raw_parsed
-            else:
-                try:
-                    answers_obj = FormAnswers.parse_obj(raw_parsed)
-                except Exception as e:
-                    logger.error(f"[OpenAI] Could not coerce parsed output to FormAnswers: {e}")
-                    answers_obj = FormAnswers(answers={}, confidence=0.0, unanswered_fields=["Error: parse conversion failed"])
-
-            # Attach token usage from API response if available
+            # Convert API schema to internal FormAnswers with token tracking
             usage = getattr(completion, "usage", None)
-            if usage:
-                try:
-                    answers_obj.prompt_tokens = usage.prompt_tokens
-                    answers_obj.completion_tokens = usage.completion_tokens
-                    logger.info(
-                        f"[OpenAI] Form answer tokens: {usage.prompt_tokens} prompt + {usage.completion_tokens} completion"
-                    )
-                except Exception:
-                    logger.debug("[OpenAI] Could not read usage fields from completion")
+            answers_obj = FormAnswers(
+                answers=parsed.answers,
+                confidence=parsed.confidence,
+                unanswered_fields=parsed.unanswered_fields,
+                prompt_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+                completion_tokens=getattr(usage, "completion_tokens", None) if usage else None,
+            )
 
-            answers_dict = answers_obj.answers or {}
-            unanswered_list = answers_obj.unanswered_fields or []
-            logger.info(f"[OpenAI] Generated {len(answers_dict)} answers, {len(unanswered_list)} unanswered")
-
+            logger.info(
+                f"[OpenAI] Generated {len(answers_obj.answers)} answers, "
+                f"{len(answers_obj.unanswered_fields)} unanswered"
+            )
             return answers_obj
-            
+
         except Exception as e:
             logger.error(f"[OpenAI] Form answer generation failed: {e}")
-            return FormAnswers(
-                answers={},
-                confidence=0.0,
-                unanswered_fields=["Error: " + str(e)]
-            )
+            return fallback
     
 
 

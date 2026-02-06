@@ -271,7 +271,8 @@ Bot-detection: "How many steps were there?" or "How many questions?"
 </meta_questions>
 
 <output_requirement>
-Return a dictionary with EVERY field_id as a key and an answer as the value.
+Return a LIST of answers, where each answer is an object with "field_id" (the form field ID) and "value" (your answer).
+Example: [{"field_id": "urn:li:fsd_formElement:123", "value": "Yes"}, {"field_id": "urn:li:fsd_formElement:456-numeric", "value": "5"}]
 Only add to unanswered_fields if the field is truly impossible to answer (extremely rare).
 Target: 95%+ of fields answered. Incomplete forms will fail to submit.
 </output_requirement>"""
@@ -317,6 +318,10 @@ def build_form_answering_prompt(
     work_auth = profile.get('work_authorization', 'US Citizen')
     requires_sponsorship = profile.get('requires_visa_sponsorship', False)
     
+    github_url = profile.get('github', profile.get('github_url', ''))
+    linkedin_url = profile.get('linkedin_url', '')
+    website_url = profile.get('website', profile.get('portfolio_url', ''))
+
     return f"""<user_profile>
 Name: {profile.get('full_name', 'N/A')}
 Email: {profile.get('email', 'N/A')}
@@ -326,8 +331,16 @@ Location: {profile.get('location', 'N/A')}
 Title: {profile.get('title', 'N/A')}
 Current Company: {current_company}
 Years Experience: {years_exp}
+GitHub: {github_url or 'N/A'}
+LinkedIn: {linkedin_url or 'N/A'}
+Website: {website_url or 'N/A'}
+Salary Range: {profile.get('salary_min', 'N/A')} - {profile.get('salary_max', 'N/A')} {profile.get('salary_currency', 'USD')}
 Skills: {skills_str}
 Summary: {profile_summary or 'N/A'}
+
+**SALARY & CURRENCY - IMPORTANT:**
+When asked about salary expectations or compensation, ALWAYS use {profile.get('salary_currency', 'USD')} as the currency.
+Never select Euro, GBP, or other currencies unless the job explicitly requires it.
 
 **WORK AUTHORIZATION STATUS:**
 Work Authorization: {work_auth}
@@ -363,7 +376,7 @@ Fill out this LinkedIn Easy Apply form by providing an answer for EVERY field.
 
 Rules:
 1. Use the user_profile data for contact info, experience, and skills
-2. Match field "id" to your answer (return dict where key = field id, value = your answer)
+2. Return each answer as {{field_id, value}} where field_id matches the form field "id"
 3. For experience questions: NEVER answer "0". If user has the skill → estimate years (2-6), if not or uncertain → answer "1" (minimum viable experience)
 4. For yes/no: Answer based on what makes sense for this job and user profile
 5. For checkboxes (follow company, terms): Answer "Yes" or "true"

@@ -352,7 +352,7 @@ def apply_to_job_by_url(
                     log_file=f"./output/{run_id}/log.html"
                 )
             
-            answers = form_answers.answers
+            answers = form_answers.answers_dict
             confidence = form_answers.confidence or 0.0
             log_metric("Generated Answers", len(answers), "fields", "🤖")
             log_metric("Confidence", f"{confidence:.2%}", "", "📊")
