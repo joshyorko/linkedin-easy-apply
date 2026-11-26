@@ -1227,7 +1227,7 @@ def navigate_and_fill_easy_apply_form(
         profile: User profile dict
         answers: AI-generated answers dict
         max_steps: Maximum number of steps to traverse (safety limit)
-        submit: Whether to click Submit button at the end
+        submit: True is rejected; only dry-run preparation is supported.
     
     Returns:
         Dict with summary: {
@@ -1239,6 +1239,14 @@ def navigate_and_fill_easy_apply_form(
             "detected_total_steps": int or None
         }
     """
+    if submit:
+        return {
+            "success": False,
+            "submitted": False,
+            "status": "SUBMISSION_DISABLED",
+            "error": "Live LinkedIn submission is disabled.",
+        }
+
     summary = {
         "filled": 0,
         "required": 0,

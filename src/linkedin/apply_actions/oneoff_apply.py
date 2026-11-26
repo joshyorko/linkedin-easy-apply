@@ -141,8 +141,8 @@ def apply_to_job_by_url(
     headless: bool = True,
     allow_submit: bool = False
 ) -> OneoffApplyResponse:
-    """Open a LinkedIn job by URL/ID, scrape Easy Apply, generate answers, and
-    optionally submit.
+    """Open a LinkedIn job by URL/ID, scrape Easy Apply, and prepare answers
+    without submitting.
 
     Navigates to the job, checks Easy Apply availability, snapshots the form,
     builds answers from the active profile, and saves job data even on failure.
@@ -152,9 +152,16 @@ def apply_to_job_by_url(
         headless: Run the browser in headless mode (True) or with a visible
             browser window (False). Use headless=True for quiet/background
             runs and headless=False when debugging or inspecting the browser.
-        allow_submit: If True the action will actually submit the application. If
-            False, performs a dry-run that fills the form but does not send it.
+        allow_submit: True is rejected; False prepares the form without submitting.
     """
+    if allow_submit:
+        return OneoffApplyResponse(
+            result="SUBMISSION_DISABLED",
+            error="Live LinkedIn submission is disabled.",
+            success=False,
+            submitted=False,
+        )
+
     # Setup logging
     run_id = f"oneoff_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     setup_logging(

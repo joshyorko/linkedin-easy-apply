@@ -55,11 +55,19 @@ def apply_to_single_job(
     Args:
         job_id: LinkedIn job ID to apply to (from database)
         headless: Run browser in headless mode (default: True)
-        allow_submit: Actually submit application (default: False for safety)
+        allow_submit: True is rejected; only dry-run preparation is supported.
     
     Returns:
         Response with application result
     """
+    if allow_submit:
+        return ApplyJobResponse(
+            result="SUBMISSION_DISABLED",
+            error="Live LinkedIn submission is disabled.",
+            success=False,
+            submitted=False,
+        )
+
     # Setup logging
     run_id = f"apply_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     setup_logging(
@@ -316,12 +324,20 @@ def batch_apply_by_run_id(
     Args:
         run_id: The search run ID from search_linkedin_easy_apply()
         headless: Run browser in headless mode (default: True)
-        allow_submit: Actually submit applications (default: False for safety)
+        allow_submit: True is rejected; only dry-run preparation is supported.
         max_applications: Maximum number of jobs to apply to (default: 10)
     
     Returns:
         Response with application summary (applied/skipped/failed counts)
     """
+    if allow_submit:
+        return BatchApplyResponse(
+            result="SUBMISSION_DISABLED",
+            error="Live LinkedIn submission is disabled.",
+            success=False,
+            submitted=False,
+        )
+
     try:
         print(f"[ACTION] Starting batch apply for run_id: {run_id}")
         print(f"[ACTION] Submit mode: {'ENABLED' if allow_submit else 'DRY RUN (disabled)'}")

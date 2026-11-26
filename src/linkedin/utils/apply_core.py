@@ -33,7 +33,7 @@ def _apply_to_job_core(
         company: Company name (for logging)
         profile: User profile dictionary
         answers: AI-generated answers dictionary
-        allow_submit: Whether to actually submit (False = safe/dry-run mode)
+        allow_submit: True is rejected; only dry-run preparation is supported.
     
     Returns:
         Dict with result: {
@@ -45,6 +45,14 @@ def _apply_to_job_core(
             "error": str (if failed)
         }
     """
+    if allow_submit:
+        return {
+            "success": False,
+            "submitted": False,
+            "status": "SUBMISSION_DISABLED",
+            "error": "Live LinkedIn submission is disabled.",
+        }
+
     result = {
         "success": False,
         "submitted": False,
