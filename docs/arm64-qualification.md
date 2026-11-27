@@ -1,6 +1,8 @@
 # Linux ARM64 qualification
 
-Release audit: 2026-11-26. Linux ARM64 is not qualified for this package.
+Historical release audit: 2026-11-26. The maintained consumer added on 2026-11-27
+uses the official Actions Runtime1.1.2 CP312 ARM64 wheel with RCC18.19.12; see
+`deployment/README.md`. Application/target acceptance is a separate gate.
 The Dockerfile rejects non-amd64 builds before downloading its executable.
 
 ## Executable and dependency chain
@@ -39,8 +41,8 @@ solving, RCC robots, Action Server import, or browser automation.
 
 ## Remaining gates
 
-The smallest missing released layer is native Linux ARM64 RCC with the matching
-embedded micromamba and architecture routing. A Python wheel can avoid a frozen
+The historical missing RCC layer above is addressed by the official1.1.2
+ARM64 wheels bundling RCC18.19.12. A Python wheel can avoid a frozen
 Action Server executable, but does not automatically replace its bundled RCC or
 downloader. An amd64 container under emulation is not native qualification.
 

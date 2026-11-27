@@ -26,14 +26,12 @@ FROM runtime-base AS application
 COPY --chown=10001:10001 package.yaml /opt/application/package.yaml
 COPY --chown=10001:10001 src /opt/application/src
 COPY --chmod=0755 deployment/start.sh /usr/local/bin/start-easy-apply
-RUN ln -s /var/lib/easy-apply/output /opt/application/output \
-    && ln -s /var/lib/easy-apply/browser_context /opt/application/browser_context \
-    && ln -s /var/lib/easy-apply/uploaded_files /opt/application/uploaded_files
 ENV HOME=/var/lib/easy-apply/home \
     ACTIONS_HOME=/var/lib/easy-apply/home/.actions \
     SEMA4AI_HOME=/var/lib/easy-apply/home/.actions \
     ROBOCORP_HOME=/var/lib/easy-apply/home/.actions \
     PYTHONPATH=/opt/application/src \
+    EASY_APPLY_STATE_DIR=/var/lib/easy-apply \
     SEMA4AI_OPTIMIZE_FOR_CONTAINER=1
 USER 10001:10001
 WORKDIR /opt/application

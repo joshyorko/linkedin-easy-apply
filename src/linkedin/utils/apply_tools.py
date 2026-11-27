@@ -6,6 +6,7 @@ import time
 import re
 
 from .tools import _sel_for_id, parse_location
+from .runtime_paths import runtime_path
 
 
 
@@ -193,7 +194,7 @@ def configure_browser(headless_mode: bool = False):
     browser.configure(
         screenshot="on",
         headless=headless_mode,
-        persistent_context_directory=os.path.join(os.getcwd(), "browser_context"),
+        persistent_context_directory=str(runtime_path("browser_context").resolve()),
 
     )
 

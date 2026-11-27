@@ -10,9 +10,8 @@ echo action and a browser action that fills inline HTML while denying browser
 network requests. It has no submission button or external endpoint declarations.
 
 The reproduction `qualification/Dockerfile` pins CPython3.12.11 Bookworm ARM64
-and the verified official1.1.2 CP312 manylinux wheel SHA-256. It is for this
-disposable fixture only, not an application deployment. Its default command is
-help. The Dockerfile itself is not build-qualified: the matching base/wheel path
+and the verified official1.1.2 CP312 manylinux wheel SHA-256. Its default target is the disposable fixture; the separate `application`
+target imports the real package and uses `deployment/start.sh`. The Dockerfile itself is not build-qualified: the matching base/wheel path
 was installed and tested inside a disposable native capped container instead.
 Use `--init`: without an init/reaper, the observed worker retirement failed with
 pidfd_open EINVAL and blocked MCP execution. With init, the full synthetic gate
