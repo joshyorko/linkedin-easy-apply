@@ -16,6 +16,9 @@ def test_four_public_actions_have_runtime_collectable_schemas(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     actions = json.loads(result.stdout)
+    assert {"query_database", "get_project_file", "list_project_files"}.isdisjoint(
+        action["name"] for action in actions
+    )
     requirements = {
         "start_public_search": {"request_key", "query"},
         "public_search_status": {"request_key"},
