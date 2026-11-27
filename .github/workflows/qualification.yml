@@ -46,7 +46,7 @@ jobs:
       - name: Offline package imports and submission guards
         run: python scripts/qualify_offline.py
       - name: Selected behavior tests
-        run: python -m pytest tests/test_submission_disabled.py tests/test_location_formatting.py tests/test_runtime_paths.py -q
+        run: python -m pytest tests/ -q
 
   native:
     name: Native ARM64 fixture

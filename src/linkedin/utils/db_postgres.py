@@ -653,7 +653,8 @@ def write_jobs(job_records: Iterable[Dict[str, Any]]) -> int:
         # Execute batch insert
         with conn.cursor() as cursor:
             cursor.executemany(query, rows)
-        
+        from .recorded_listings import append_observations
+        append_observations(conn, records, postgres=True)
         conn.commit()
         
         # Verify
@@ -667,7 +668,9 @@ def write_jobs(job_records: Iterable[Dict[str, Any]]) -> int:
                 print(f"[PostgreSQL] Verified {count}/{len(job_ids)} records exist")
         
         return len(records)
-        
+    except BaseException:
+        conn.rollback()
+        raise
     finally:
         pool.putconn(conn)
 

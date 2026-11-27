@@ -17,35 +17,15 @@ from linkedin.utils import db
 
 
 @pytest.fixture(scope="function")
-def clean_db():
-    """Create a fresh test database for each test."""
-    test_db_path = Path(os.environ["SQLITE_PATH"])
-    
-    # Remove test database if it exists
-    if test_db_path.exists():
-        test_db_path.unlink()
-    
-    # Also remove WAL files
-    wal_path = Path(str(test_db_path) + "-wal")
-    shm_path = Path(str(test_db_path) + "-shm")
-    if wal_path.exists():
-        wal_path.unlink()
-    if shm_path.exists():
-        shm_path.unlink()
-    
-    # Force reconnection
-    import linkedin.utils.db_sqlite as db_sqlite
-    db_sqlite._connection = None
-    
+def clean_db(monkeypatch, tmp_path):
+    import threading
+    from linkedin.utils import db_sqlite
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "jobs.sqlite"))
+    monkeypatch.setattr(db_sqlite, "_connections", threading.local())
     yield
-    
-    # Cleanup after test
-    if test_db_path.exists():
-        test_db_path.unlink()
-    if wal_path.exists():
-        wal_path.unlink()
-    if shm_path.exists():
-        shm_path.unlink()
+    connection = getattr(db_sqlite._connections, "connection", None)
+    if connection is not None:
+        connection.close()
 
 
 def test_connection(clean_db):
@@ -260,6 +240,12 @@ def test_get_jobs_pending_enrichment(clean_db):
     
     db.write_jobs(jobs)
     
+    pending = db.get_jobs_pending_enrichment()
+    # A processed flag alone does not establish that AI enrichment occurred.
+    assert {job['job_id'] for job in pending} == {'p1', 'p2'}
+    connection = db.get_connection()
+    connection.execute("UPDATE job_postings SET ai_enriched_at = '2099-01-01' WHERE job_id = 'p2'")
+    connection.commit()
     pending = db.get_jobs_pending_enrichment()
     assert len(pending) == 1
     assert pending[0]['job_id'] == 'p1'

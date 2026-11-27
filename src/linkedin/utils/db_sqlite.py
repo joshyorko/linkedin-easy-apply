@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import json
 import sqlite3
+import threading
 from typing import Any, Dict, Iterable, List, Optional, Union
 from pathlib import Path
 from sqlite3 import Connection
@@ -26,44 +27,40 @@ def get_db_path() -> str:
     return str(workspace_root / "linkedin_jobs.sqlite")
 
 
-# Singleton connection instance
-_connection: Optional[Connection] = None
+# SQLite statement caches and transactions belong to the calling thread.
+_connections = threading.local()
+_connection_init_lock = threading.Lock()
 
 
 def get_connection() -> Connection:
-    """Get or create a singleton SQLite connection.
-    
-    Uses singleton pattern to avoid connection overhead on each operation.
-    The connection stays open for the lifetime of the process.
+    """Reuse one fully initialized SQLite connection per thread.
+
+    WAL permits readers on separate connections while another thread writes.
+    Keep SQLite's thread ownership check enabled so transaction and statement
+    state cannot be shared accidentally.
     """
-    global _connection
-    
-    if _connection is None:
-        db_path = get_db_path()
-        # Create parent directory if needed
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        
-        _connection = sqlite3.connect(db_path, check_same_thread=False)
-        _connection.row_factory = sqlite3.Row  # Dict-like row access
-        
-        # Enable WAL mode for better concurrency
-        _connection.execute("PRAGMA journal_mode = WAL")
-        
-        # Faster synchronous mode (safe for local use)
-        _connection.execute("PRAGMA synchronous = NORMAL")
-        
-        # Use memory for temp tables
-        _connection.execute("PRAGMA temp_store = MEMORY")
-        
-        # Increase cache size (10MB)
-        _connection.execute("PRAGMA cache_size = -10000")
-        
-        _ensure_schema(_connection)
-        _migrate_schema(_connection)  # Run migrations after schema creation
-        
-        print(f"[SQLite] Connected to: {db_path}")
-    
-    return _connection
+    connection: Connection | None = getattr(_connections, "connection", None)
+    if connection is None:
+        # Serialize schema creation/migration before publishing a connection.
+        with _connection_init_lock:
+            db_path = get_db_path()
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA journal_mode = WAL")
+                connection.execute("PRAGMA synchronous = NORMAL")
+                connection.execute("PRAGMA temp_store = MEMORY")
+                connection.execute("PRAGMA cache_size = -10000")
+                _ensure_schema(connection)
+                _migrate_schema(connection)
+            except Exception:
+                connection.close()
+                raise
+            _connections.connection = connection
+            print(f"[SQLite] Connected to: {db_path}")
+
+    return connection
 
 
 def _get_schema_version(conn: Connection) -> int:
@@ -657,8 +654,10 @@ def write_jobs(job_records: Iterable[Dict[str, Any]]) -> int:
     print(f"[SQLite] Database: {get_db_path()}")
     
     # Execute batch insert
-    conn.executemany(query, rows)
-    conn.commit()
+    from .recorded_listings import append_observations
+    with conn:
+        conn.executemany(query, rows)
+        append_observations(conn, records, postgres=False)
     
     # Verify
     if job_ids:
