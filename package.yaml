@@ -7,7 +7,7 @@ name: linkedin-easy-apply-server
 description: A set of tools allowing you to easily apply to LinkedIn Easy Apply jobs.
 
 # Package version number, recommend using semver.org
-version: 0.0.1
+version: 0.0.2
 
 pythonpath:
   - src

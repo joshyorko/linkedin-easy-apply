@@ -1,3 +1,6 @@
+from .filters import _apply_search_filters
+from ..utils.search_history import execution_run_id
+from ..utils.runtime_paths import runtime_path
 from actions import ActionError, Response, action
 import dotenv
 import os
@@ -45,7 +48,8 @@ def _worker_scrape_jobs(
     run_id: str,
     headless: bool,
     results_queue: Queue,
-    context_dir: str
+    context_dir: str,
+    snapshot_easy_apply: bool = True
 ):
     """Worker function that runs in its own thread with its own browser instance.
     
@@ -133,7 +137,7 @@ def _worker_scrape_jobs(
                             job_id, 
                             run_id, 
                             fast_mode=False, 
-                            snapshot_easy_apply=True,
+                            snapshot_easy_apply=snapshot_easy_apply,
                             username_secret=LINKEDIN_USERNAME,
                             password_secret=LINKEDIN_PASSWORD
                         )
@@ -191,7 +195,9 @@ def parallel_search_linkedin_easy_apply(
     parallel_workers: int = 3,  # Changed from 5 to 3 - LinkedIn rate limits above 3-4 concurrent
     remote: bool = False,
     hybrid: bool = False,
-    onsite: bool = False
+    onsite: bool = False,
+    easy_apply_only: bool = True,
+    snapshot_easy_apply: bool = True
 ) -> ParallelSearchResponse:
     """Parallel job search using multiple browser instances (RAW PLAYWRIGHT).
     
@@ -206,11 +212,13 @@ def parallel_search_linkedin_easy_apply(
         remote: Include only Remote jobs (can be combined with others)
         hybrid: Include Hybrid jobs (can be combined)
         onsite: Include On-site jobs (can be combined)
+        easy_apply_only: Restrict to Easy Apply jobs; discovery explicitly disables this.
+        snapshot_easy_apply: Capture form fields; discovery always disables this.
     
     Returns:
         Response with job_ids_found and processing statistics.
     """
-    run_id = f"parallel_search_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_id = execution_run_id("parallel")
     
     # Setup logging
     setup_logging(
@@ -237,7 +245,7 @@ def parallel_search_linkedin_easy_apply(
             )
         
         # Shared browser context directory
-        context_dir = os.path.join(os.getcwd(), "browser_context")
+        context_dir = str(runtime_path("browser_context").resolve())
         
         if not os.path.exists(context_dir):
             log_warning(
@@ -318,151 +326,8 @@ def parallel_search_linkedin_easy_apply(
             log.info(f"Search submitted, waiting for results...")
             time.sleep(3)
             
-            # Filter Easy Apply (+ optional work arrangement filters) - EXACT COPY FROM search.py
-            # Try to click "Show all filters" button with fallback strategies
-            filters_opened = False
-            
-            for button_name in ["Show all filters. Clicking", "Show all filters", "All filters"]:
-                try:
-                    log.info(f"Trying to find filter button: '{button_name}'")
-                    page.get_by_role("button", name=button_name).click(timeout=5000)
-                    filters_opened = True
-                    log.info(f"✓ Opened filters dialog")
-                    break
-                except Exception as e:
-                    log.info(f"Button '{button_name}' not found: {e}")
-                    continue
-            
-            if not filters_opened:
-                # Try direct CSS selectors as fallback
-                filter_css_selectors = [
-                    'button[aria-label*="Show all filters"]',
-                    'button:has-text("All filters")',
-                    'button[aria-label*="filters"]',
-                ]
-                for selector in filter_css_selectors:
-                    try:
-                        page.locator(selector).first.click(timeout=3000)
-                        filters_opened = True
-                        log.info(f"✓ Opened filters via CSS selector: {selector}")
-                        break
-                    except Exception:
-                        continue
-            
-            if not filters_opened:
-                log_warning(
-                    "Could not open filters dialog",
-                    details="Proceeding without Easy Apply filter - results may include non-Easy Apply jobs"
-                )
-            time.sleep(0.8)
-            
-            # Easy Apply toggle (robust fallbacks) - EXACT COPY FROM search.py
-            toggled = False
-            toggle_text_variants = [
-                "Off Toggle Easy Apply filter",
-                "Toggle Easy Apply filter",
-                "Easy Apply",
-            ]
-
-            for txt in toggle_text_variants:
-                try:
-                    page.get_by_text(txt, exact=False).click()
-                    toggled = True
-                    log.info(f"✓ Toggled Easy Apply filter")
-                    break
-                except Exception:
-                    pass
-            if not toggled:
-                log.info("Warning: Could not positively toggle Easy Apply filter (may already be on)")
-
-            # Apply work arrangement filters if requested - EXACT COPY FROM search.py
-            work_filters_requested = []
-            if remote: work_filters_requested.append("remote")
-            if hybrid: work_filters_requested.append("hybrid")
-            if onsite: work_filters_requested.append("onsite")
-
-            if work_filters_requested:
-                try:
-                    filters_container = page.get_by_label("All filters", exact=True)
-                except Exception:
-                    try:
-                        filters_container = page.get_by_role("dialog")
-                    except Exception:
-                        filters_container = page
-
-                arrangement_label_map = {
-                    "remote": ["Remote Filter", "Remote (work from home)", "Remote"],
-                    "hybrid": ["Hybrid Filter", "Hybrid"],
-                    "onsite": ["On-site", "Onsite"],
-                }
-
-                def try_click_patterns(container, patterns: list) -> str | None:
-                    for pat in patterns:
-                        try:
-                            label_locator = container.locator("label").filter(has_text=pat)
-                            if label_locator.count() > 0:
-                                label_locator.first.click(timeout=2000)
-                                return pat
-                        except Exception:
-                            pass
-                        try:
-                            container.get_by_text(pat, exact=False).first.click(timeout=2000)
-                            return pat
-                        except Exception:
-                            pass
-                    return None
-
-                for mode in work_filters_requested:
-                    patterns = arrangement_label_map.get(mode, [])
-                    applied_pattern = try_click_patterns(filters_container, patterns)
-                    if applied_pattern:
-                        log.info(f"✓ Applied work arrangement filter: {mode} via pattern '{applied_pattern}'")
-                    else:
-                        try:
-                            keyword = mode.replace("onsite", "On").split()[0].replace("remote", "Remote").replace("hybrid", "Hybrid")
-                            labels = filters_container.locator("label")
-                            count = labels.count()
-                            for i in range(min(count, 40)):
-                                txt = labels.nth(i).inner_text(timeout=1000)
-                                if keyword.lower() in txt.lower():
-                                    try:
-                                        labels.nth(i).click()
-                                        log.info(f"✓ Applied work arrangement filter by scan: {mode} -> '{txt[:60]}'")
-                                        break
-                                    except Exception:
-                                        pass
-                            else:
-                                log.info(f"Warning: Could not apply work arrangement filter: {mode}")
-                        except Exception:
-                            log.info(f"Warning: Could not apply work arrangement filter (scan failed): {mode}")
-
-            # Apply filters - EXACT COPY FROM search.py
-            try:
-                apply_variants = [
-                    "Apply current filters to show",
-                    "Apply filters",
-                    "Show results",
-                    "View results"
-                ]
-                applied_btn = False
-                for name in apply_variants:
-                    try:
-                        page.get_by_role("button", name=name).click()
-                        applied_btn = True
-                        log.info(f"✓ Applied filters")
-                        break
-                    except Exception:
-                        pass
-                if not applied_btn:
-                    try:
-                        page.get_by_label("All filters", exact=True).get_by_role("button").filter(has_text="Apply").first.click()
-                        applied_btn = True
-                        log.info(f"✓ Applied filters (fallback)")
-                    except Exception:
-                        log.info("Warning: Could not find an Apply/Show results button; proceeding anyway")
-            except Exception:
-                pass
-            time.sleep(2.5)
+            active_filters = _apply_search_filters(page, easy_apply_only=easy_apply_only,
+                remote=remote, hybrid=hybrid, onsite=onsite)
 
             # Collect job IDs with pagination - using same approach as search.py
             log.info("Collecting job IDs with pagination...")
@@ -488,7 +353,7 @@ def parallel_search_linkedin_easy_apply(
         
         # Split job IDs into batches for parallel processing
         jobs_to_process = job_ids[:max_jobs]
-        batch_size = max(1, len(jobs_to_process) // parallel_workers)
+        batch_size = max(1, (len(jobs_to_process) + parallel_workers - 1) // parallel_workers)
         job_batches = [
             jobs_to_process[i:i + batch_size]
             for i in range(0, len(jobs_to_process), batch_size)
@@ -511,7 +376,7 @@ def parallel_search_linkedin_easy_apply(
             
             t = Thread(
                 target=_worker_scrape_jobs,
-                args=(worker_id, batch, run_id, headless, results_queue, context_dir)
+                args=(worker_id, batch, run_id, headless, results_queue, context_dir, snapshot_easy_apply)
             )
             t.start()
             threads.append(t)
@@ -616,17 +481,14 @@ def parallel_search_linkedin_easy_apply(
             failed_job_ids=list(all_failed_jobs.keys()),
             failed_jobs_details=all_failed_jobs,
             total_jobs=len(successful_job_ids),
+            attempted_count=len(job_ids[:max_jobs]),
             easy_apply_count=len(easy_apply_job_ids),
             failed_count=len(all_failed_jobs),
             db_records_written=db_written_count,
             csv_exported=csv_path,
             pending_enrichment_job_ids=easy_apply_job_ids,
             pending_enrichment_count=len(easy_apply_job_ids),
-            filters={
-                "remote": remote,
-                "hybrid": hybrid,
-                "onsite": onsite
-            },
+            filters=active_filters["active"],
             parallel_workers_used=len(job_batches),
             log_file=f"./output/{run_id}/log.html"
         )

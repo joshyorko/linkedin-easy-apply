@@ -175,6 +175,7 @@ class SearchResponse(Response[str]):
     job_ids_found: List[str] = Field(default_factory=list)
     easy_apply_job_ids: List[str] = Field(default_factory=list)
     total_jobs: int = 0
+    attempted_count: int = 0
     easy_apply_count: int = 0
     db_records_written: int = 0
     csv_exported: str = ""
