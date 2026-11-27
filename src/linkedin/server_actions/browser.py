@@ -1,4 +1,4 @@
-from sema4ai.actions import ActionError, action
+from actions import ActionError, action
 
 from ..utils.responses import BrowserContextResponse
 from robocorp import browser

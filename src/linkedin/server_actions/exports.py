@@ -1,4 +1,4 @@
-from sema4ai.actions import action, chat
+from actions import action, chat
 import pandas as pd
 import json
 from datetime import datetime

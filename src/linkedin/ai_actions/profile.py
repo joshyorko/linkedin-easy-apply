@@ -1,4 +1,4 @@
-from sema4ai.actions import action, chat
+from actions import action, chat
 
 from ..utils.responses import (
     ProfileParseResponse,

@@ -1,0 +1,13 @@
+spec-version: v2
+name: easy-apply-synthetic-qualification
+description: Local synthetic action and browser qualification without external accounts.
+version: 0.0.1
+dependencies:
+  conda-forge:
+    - python=3.12.11
+    - uv=0.9.22
+  pypi:
+    - actions-core=1.1.0
+    - robocorp-browser=2.3.5
+post-install:
+  - playwright install chromium

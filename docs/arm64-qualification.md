@@ -53,7 +53,7 @@ No live login or application is part of these checks.
 
 ## Offline safety smoke
 
-`uv run --no-project --with sema4ai-actions==1.6.6 python tests/test_submission_disabled.py`
+`uv run --no-project --with actions-core==1.1.0 python tests/test_submission_disabled.py`
 executes all five rejection paths using real pinned response models. It isolates
 function bodies from module imports, so it proves early rejection without browser,
 database or network dependencies; it does not qualify full package imports.

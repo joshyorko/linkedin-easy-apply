@@ -4,7 +4,7 @@ Response and data models for LinkedIn Easy Apply actions.
 Each action returns a typed Response subclass instead of a bare Response(result={...})
 so that fields are validated, documented, and visible to MCP/tool consumers.
 """
-from sema4ai.actions import Response
+from actions import Response
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import Field

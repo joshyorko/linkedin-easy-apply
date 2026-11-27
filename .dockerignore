@@ -3,6 +3,17 @@
 *.md
 *.png
 .env.example
+**/__pycache__
+**/*.pyc
+**/*.sqlite*
+**/*.db
+**/.env*
+**/browser_context
+**/uploaded_files
+**/output
+.secrets
+devdata
+*.log
 
 # Action Server
 robot.yaml

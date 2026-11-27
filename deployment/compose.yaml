@@ -1,0 +1,25 @@
+name: easy-apply-private
+services:
+  app:
+    image: ${EASY_APPLY_IMAGE:?An immutable qualified image ID or digest is required}
+    init: true
+    network_mode: host
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 1.5
+    pids_limit: 512
+    shm_size: 256m
+    restart: unless-stopped
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_URL: service=easy_apply
+      PGSERVICEFILE: /run/secrets/database-service
+      ACTION_SERVER_API_KEY_FILE: /run/secrets/runtime-api-key
+      ACTION_SERVER_PORT: ${ACTION_SERVER_PORT:-8080}
+    volumes:
+      - state:/var/lib/easy-apply
+      - ${EASY_APPLY_DB_SERVICE_FILE:?Owner-provisioned service file required}:/run/secrets/database-service:ro
+      - ${EASY_APPLY_DB_CA_FILE:?Owner-provisioned CA file required}:/run/secrets/database-ca:ro
+      - ${EASY_APPLY_RUNTIME_KEY_FILE:?Independent runtime key file required}:/run/secrets/runtime-api-key:ro
+volumes:
+  state:

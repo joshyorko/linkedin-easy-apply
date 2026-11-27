@@ -4,7 +4,7 @@ One-off job application action.
 Directly navigates to a LinkedIn job URL/ID, scrapes the Easy Apply form,
 generates answers with LLM, and applies immediately.
 """
-from sema4ai.actions import action
+from actions import action
 from robocorp import browser
 import dotenv
 import os
