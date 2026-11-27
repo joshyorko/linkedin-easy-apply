@@ -1,0 +1,112 @@
+name: ARM64 application image artifact
+
+on:
+  pull_request:
+    paths: [".github/workflows/application-image.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
+    env:
+      SOURCE_REVISION: 2bcca19b0eff40bdd14808fbb1e951fb126184ba
+      WORKFLOW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 2bcca19b0eff40bdd14808fbb1e951fb126184ba
+          persist-credentials: false
+      - name: Build fixed public application source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          test -z "$(git status --porcelain)"
+          docker build --file qualification/Dockerfile --target application \
+            --label "org.opencontainers.image.revision=$SOURCE_REVISION" \
+            --tag "easy-apply-application:$SOURCE_REVISION" .
+      - name: Verify packaged source and record immutable provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+
+          def digest(path):
+              with path.open('rb') as stream:
+                  return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+          revision = os.environ['SOURCE_REVISION']
+          image = 'easy-apply-application:' + revision
+          inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image]))[0]
+          assert inspected['Architecture'] == 'arm64'
+          assert inspected['Config']['Labels']['org.opencontainers.image.revision'] == revision
+          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          source = {}
+          for name in filter(None, names):
+              path = pathlib.Path(name)
+              assert not path.is_symlink(), name
+              source[name] = digest(path)
+          packaged_names = [name for name in source if name == 'package.yaml' or name.startswith('src/')]
+          probe = '''import hashlib,json,pathlib,sys
+          names=json.load(sys.stdin)
+          print(json.dumps({n:hashlib.sha256(pathlib.Path(n).read_bytes()).hexdigest() for n in names}))'''
+          packaged = json.loads(subprocess.check_output([
+              'docker', 'run', '--rm', '--network', 'none', '--interactive',
+              '--entrypoint', 'python', image, '-c', probe
+          ], input=json.dumps(packaged_names).encode()))
+          assert packaged == {name: source[name] for name in packaged_names}
+          startup = subprocess.check_output([
+              'docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'python', image, '-c',
+              "import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('/usr/local/bin/start-easy-apply').read_bytes()).hexdigest())"
+          ]).decode().strip()
+          assert startup == source['deployment/start.sh']
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'application-image'
+          output.mkdir()
+          (output / 'image-inspect.json').write_text(json.dumps(inspected, indent=2) + '\n')
+          receipt = {
+              'source_revision': revision, 'workflow_revision': os.environ['WORKFLOW_REVISION'],
+              'repository': os.environ['GITHUB_REPOSITORY'], 'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'image_id': inspected['Id'],
+              'architecture': inspected['Architecture'], 'checkout_source_sha256': source,
+              'packaged_source_sha256': packaged, 'startup_sha256': startup,
+              'qualification': 'build and packaged-source verification only; no deployment or peer acceptance'
+          }
+          (output / 'provenance.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Export bounded canonical image archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker save "easy-apply-application:$SOURCE_REVISION" | gzip -1 > "$RUNNER_TEMP/application-image/image.tar.gz"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'application-image'
+          archive = output / 'image.tar.gz'
+          # Leave headroom for ZIP metadata below the supported 512 MiB limit.
+          assert archive.stat().st_size < 500_000_000, 'Image artifact exceeds supported download size'
+          path = output / 'provenance.json'
+          receipt = json.loads(path.read_text())
+          with archive.open('rb') as stream:
+              checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
+          receipt.update(archive_format='docker-save+gzip', archive_sha256=checksum,
+                         archive_bytes=archive.stat().st_size)
+          path.write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: application-arm64-2bcca19b-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/application-image/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
