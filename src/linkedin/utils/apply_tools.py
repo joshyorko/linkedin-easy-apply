@@ -6,6 +6,7 @@ import time
 import re
 
 from .tools import _sel_for_id, parse_location
+from .runtime_paths import runtime_path
 
 
 
@@ -193,7 +194,7 @@ def configure_browser(headless_mode: bool = False):
     browser.configure(
         screenshot="on",
         headless=headless_mode,
-        persistent_context_directory=os.path.join(os.getcwd(), "browser_context"),
+        persistent_context_directory=str(runtime_path("browser_context").resolve()),
 
     )
 
@@ -1227,7 +1228,7 @@ def navigate_and_fill_easy_apply_form(
         profile: User profile dict
         answers: AI-generated answers dict
         max_steps: Maximum number of steps to traverse (safety limit)
-        submit: Whether to click Submit button at the end
+        submit: True is rejected; only dry-run preparation is supported.
     
     Returns:
         Dict with summary: {
@@ -1239,6 +1240,14 @@ def navigate_and_fill_easy_apply_form(
             "detected_total_steps": int or None
         }
     """
+    if submit:
+        return {
+            "success": False,
+            "submitted": False,
+            "status": "SUBMISSION_DISABLED",
+            "error": "Live LinkedIn submission is disabled.",
+        }
+
     summary = {
         "filled": 0,
         "required": 0,

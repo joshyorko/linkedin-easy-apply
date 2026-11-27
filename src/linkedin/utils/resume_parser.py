@@ -12,8 +12,8 @@ from typing import Dict, Optional
 from pathlib import Path
 
 try:
-    from sema4ai.actions import chat
-    from sema4ai_http import get as http_get
+    from actions import chat
+    from actions_http import get as http_get
     from openai import OpenAI
     from pypdf import PdfReader
     from pydantic import BaseModel

@@ -1,0 +1,92 @@
+name: Qualification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Offline (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: 3.12.11
+      - name: Install exact package dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install PyYAML==6.0.4 pytest==8.3.5
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+          dependencies = yaml.safe_load(Path('package.yaml').read_text())['dependencies']['pypi']
+          Path(os.environ['RUNNER_TEMP'], 'package-requirements.txt').write_text(
+              '\n'.join(item.replace('=', '==', 1) for item in dependencies) + '\n')
+          PY
+          python -m pip install -r "$RUNNER_TEMP/package-requirements.txt"
+      - name: Offline package imports and submission guards
+        run: python scripts/qualify_offline.py
+      - name: Selected behavior tests
+        run: python -m pytest tests/test_submission_disabled.py tests/test_location_formatting.py tests/test_runtime_paths.py -q
+
+  native:
+    name: Native ARM64 fixture
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build pinned native wheel consumer
+        run: docker build --file qualification/Dockerfile --tag easy-apply-qualification .
+      - name: Build and import the full application without account state
+        run: docker build --file qualification/Dockerfile --target application --tag easy-apply-application .
+      - name: Cold and restart qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          qualification_root="$RUNNER_TEMP/easy-apply-qualification"
+          mkdir -p "$qualification_root"
+          sudo chown 10001:10001 "$qualification_root"
+          for phase in cold restart; do
+            docker run --rm --init --memory=2g --memory-swap=2g --cpus=1.5 \
+              --pids-limit=512 --shm-size=256m \
+              --mount "type=bind,src=$qualification_root,dst=/qual" \
+              --mount "type=bind,src=$PWD/scripts/qualify_native.py,dst=/opt/qualify_native.py,readonly" \
+              --env EASY_APPLY_FIXTURE_DIR=/opt/fixture \
+              --entrypoint python easy-apply-qualification /opt/qualify_native.py
+            sudo cp "$qualification_root/home/receipt.json" "$RUNNER_TEMP/receipt-$phase.json"
+            sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/receipt-$phase.json"
+          done
+          docker image inspect --format '{{.Id}}' easy-apply-qualification > "$RUNNER_TEMP/image-id.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-sha.txt"
+      - name: Retain nonsecret qualification receipts only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-arm64-qualification
+          path: |
+            ${{ runner.temp }}/receipt-cold.json
+            ${{ runner.temp }}/receipt-restart.json
+            ${{ runner.temp }}/image-id.txt
+            ${{ runner.temp }}/source-sha.txt
+          if-no-files-found: error
+          retention-days: 7

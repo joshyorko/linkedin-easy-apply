@@ -28,6 +28,7 @@ from datetime import datetime
 from urllib.parse import urljoin
 
 from .responses import LinkedInJob
+from .runtime_paths import runtime_path
 
 from .enhanced_extraction import enhance_job_extraction
 
@@ -2262,7 +2263,7 @@ def configure_browser(headless_mode: bool = False):
     browser.configure(
         screenshot="only-on-failure",
         headless=headless_mode,
-        persistent_context_directory=os.path.join(os.getcwd(), "browser_context"),
+        persistent_context_directory=str(runtime_path("browser_context").resolve()),
         browser_engine="chromium",  # Explicitly use chromium
     )
 

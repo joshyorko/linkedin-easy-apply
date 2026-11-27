@@ -1,15 +1,4 @@
-import sys
-import types
-
 import pytest
-
-if "robocorp" not in sys.modules:
-    robocorp_stub = types.ModuleType("robocorp")
-    browser_stub = types.ModuleType("browser")
-    browser_stub.configure = lambda *args, **kwargs: None  # type: ignore
-    robocorp_stub.browser = browser_stub  # type: ignore[attr-defined]
-    sys.modules["robocorp"] = robocorp_stub
-    sys.modules["robocorp.browser"] = browser_stub
 
 from linkedin.utils.apply_tools import (
     _desired_location_strings,

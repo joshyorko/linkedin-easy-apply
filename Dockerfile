@@ -8,8 +8,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ADD https://github.com/joshyorko/actions/releases/download/action-server-v1.2.2/action-server-linux64 /usr/local/bin/action-server
-RUN chmod +x /usr/local/bin/action-server
+RUN test "$(dpkg --print-architecture)" = amd64 \
+    || { echo 'This pinned Action Server release supports Linux amd64 only' >&2; exit 1; }
+RUN curl --proto '=https' --tlsv1.2 -fsSL \
+    https://github.com/joshyorko/actions/releases/download/action-server-v1.2.2/action-server-linux64 \
+    -o /usr/local/bin/action-server \
+    && echo '5fbd23582d003651b617be2518fccfd4865d71a495cf376709a90f36df15c880  /usr/local/bin/action-server' | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/action-server
 
 FROM debian:bookworm-slim AS runtime
 

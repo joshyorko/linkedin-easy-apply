@@ -23,6 +23,7 @@ from datetime import datetime
 
 # Import robocorp.log (required dependency in package.yaml)
 from robocorp import log
+from .runtime_paths import runtime_path
 
 
 # Global flag to track if logging has been initialized
@@ -68,7 +69,7 @@ def setup_logging(
     if output_dir is None:
         output_dir = os.getenv("ROBOCORP_LOG_OUTPUT_DIR", "./output")
     
-    output_path = Path(output_dir)
+    output_path = runtime_path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
     # Configure log level - use string literals for type safety

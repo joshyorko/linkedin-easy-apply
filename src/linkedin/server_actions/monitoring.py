@@ -1,5 +1,5 @@
-from sema4ai.actions import Response, action
-from sema4ai_http import get as http_get, post as http_post
+from actions import Response, action
+from actions_http import get as http_get, post as http_post
 import os
 import json
 import urllib.parse

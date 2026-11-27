@@ -1,4 +1,4 @@
-from sema4ai.actions import Response, action
+from actions import Response, action
 import os
 from pathlib import Path
 
