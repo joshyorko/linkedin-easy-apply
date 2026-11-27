@@ -1,11 +1,10 @@
-from actions import Response, action
+from actions import Response
 import os
 from pathlib import Path
 
 from ..utils.db import get_connection
 from ..utils.responses import QueryDatabaseResponse
 
-@action(is_consequential=False)
 def query_database(sql_query: str) -> QueryDatabaseResponse:
     """
     Execute SQL query against the configured database (SQLite/PostgreSQL) and return results. Utility for inspecting database state and debugging enrichment workflow. SELECT statements only.
@@ -70,7 +69,6 @@ def query_database(sql_query: str) -> QueryDatabaseResponse:
         )
 
 
-@action(is_consequential=False)
 def get_project_file(file_path: str) -> Response[str]:
     """
     Return the contents of a project file by relative path.
@@ -127,7 +125,6 @@ def get_project_file(file_path: str) -> Response[str]:
         return Response(result=f"Error reading file: {str(e)}\nPath: {file_path}")
 
 
-@action(is_consequential=False)
 def list_project_files(directory: str = ".") -> Response[str]:
     """
     List files and directories in the project.
