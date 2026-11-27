@@ -1,8 +1,8 @@
-# Publication review required
+# Publication review record
 
-Do not push this candidate, upload its patch, open a public PR, or send a cleanup
-handoff until the source publication restriction is resolved. Do not delete the
-JHT bundled integration.
+The owner authorized publication of this reviewed candidate on 2026-11-27 after
+the private-source restriction and affected files were identified. Do not delete
+the JHT bundled integration; independent acceptance remains required.
 
 GitHub repository metadata checked on 2026-11-27 reports JHT as private.
 Standalone public main is `9d696ab45e0aa81e051a83ea48db483313cc62c1`, matching
@@ -22,17 +22,16 @@ The candidate includes copied or adapted private-source material in:
 - `tests/test_search_history.py`
 - `tests/test_search_filter_contract.py`
 
-These files need an already-public source/provenance receipt or explicit owner
-authorization to publish the reviewed candidate despite the previous restriction.
-The remaining changes must be reviewed together with them as one outward diff.
-No private source or patch has been sent to GitHub by this lane.
+The owner's explicit publication authorization applies to this reviewed candidate.
+The remaining changes must be reviewed together with these files as one outward
+diff. Credentials, account data, and production records remain excluded.
 
 The local compatibility receipt is in `jht-compatibility.md`. The full suite
 passes with disposable synthetic PostgreSQL, including actual process restart
 and duplicate delivery. This does not qualify independent Rails Solid Queue
 delivery, deployed Runtime HTTP, live accounts, or browser behavior.
 
-After publication approval, create the normal public PR, qualify that exact
+Create the normal public PR, qualify that exact
 commit in CI, and run the independent JHT recorded/synthetic Solid Queue
 acceptance against the standalone endpoint. Only then send the exact qualified
 commit and scope through the approved cleanup handoff. Bundle deletion remains

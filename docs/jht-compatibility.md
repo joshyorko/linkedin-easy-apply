@@ -61,6 +61,6 @@ Offline qualification passed 36 module imports and five submission rejections.
 The full suite is included in the existing qualification CI;
 CI execution is not claimed by these local results.
 
-This candidate is **not approved for publication or JHT cleanup**. See
-`publication-review.md` for the provenance blocker. Local test success is not
+The owner authorized publication; see `publication-review.md`. This candidate
+is **not approved for JHT cleanup**. Local test success is not
 an independent Rails Solid Queue or deployed HTTP acceptance receipt.
