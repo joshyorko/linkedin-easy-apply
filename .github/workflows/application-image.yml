@@ -88,18 +88,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker save "easy-apply-application:$SOURCE_REVISION" | gzip -1 > "$RUNNER_TEMP/application-image/image.tar.gz"
+          docker save "easy-apply-application:$SOURCE_REVISION" | xz -6 --threads=2 > "$RUNNER_TEMP/application-image/image.tar.xz"
           python3 - <<'PY'
           import hashlib, json, os, pathlib
           output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'application-image'
-          archive = output / 'image.tar.gz'
+          archive = output / 'image.tar.xz'
           # Leave headroom for ZIP metadata below the supported 512 MiB limit.
-          assert archive.stat().st_size < 500_000_000, 'Image artifact exceeds supported download size'
+          assert archive.stat().st_size < 500_000_000, f'Image archive is {archive.stat().st_size} bytes; exceeds supported download size'
           path = output / 'provenance.json'
           receipt = json.loads(path.read_text())
           with archive.open('rb') as stream:
               checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
-          receipt.update(archive_format='docker-save+gzip', archive_sha256=checksum,
+          receipt.update(archive_format='docker-save+xz', archive_sha256=checksum,
                          archive_bytes=archive.stat().st_size)
           path.write_text(json.dumps(receipt, indent=2) + '\n')
           PY
