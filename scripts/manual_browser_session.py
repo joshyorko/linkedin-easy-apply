@@ -16,8 +16,8 @@ import tempfile
 import time
 import urllib.request
 
-IMAGE = "sha256:08b39aaf53a7eeea73f2e6198cc047ed6e7412a05ba42b7c5956c652a69d5da7"
-SOURCE = "c2eb10c31ba352155a20f374fb1f1ead360a06b6"
+IMAGE = "sha256:95079392cf8f18614f871044e210c06708125f23d249f245ed266b9d5c4f66eb"
+SOURCE = "2a69e1fc8fcf83f7957940a4b885843d5a0776cd"
 CHROME = "/var/lib/easy-apply/home/.cache/ms-playwright/chromium-1255/chrome-linux-arm64/chrome"
 PORT = 6088
 VOLUME = "easy-apply-private_state"

@@ -75,4 +75,29 @@ It uses a randomly named throwaway Docker volume, network none, local HTML and
 automatic teardown. Never replace that volume with the real profile for testing.
 Local boundary tests: `python3 -m unittest discover -s tests -p test_manual_browser_session.py -v`.
 
+## Promoted-image requalification (2026-11-27)
+
+The launcher now pins the promoted ARM64 image
+`sha256:95079392cf8f18614f871044e210c06708125f23d249f245ed266b9d5c4f66eb`
+and source `2a69e1fc8fcf83f7957940a4b885843d5a0776cd`. Read-only inspection
+confirmed the running app image, its ARM64 architecture, and its revision label.
+The image still contains `robocorp-browser==2.3.5` and `actions-runtime==1.1.2`.
+
+After the app owner released the runtime reservation, the updated launcher's
+account-free `--synthetic` run passed against that exact image. The proof covered
+loopback-only noVNC readiness, headed and headless namespace/seccomp sandboxing,
+concurrent-lease rejection, absent cookies, profile persistence after clean close,
+and a DevTools screenshot restricted to a second disposable profile's isolated
+loopback. A separate interrupted synthetic run also exited with cleanup.
+
+After both runs, inspection found no owned UI listener, test container, temporary
+volume, or remote scratch directory. The live app's image, start time, and restart
+count were unchanged. No real profile was mounted, no service was stopped, and
+no account or submission action was invoked. All four local boundary tests passed.
+
+Josh confirmed the imported **Sign in to LinkedIn** menu item is visible.
+Registration was not retried. The reviewed pin update must reach the project
+checkout before use. Real invocation remains held for the coordinated exclusive
+profile window and Josh's presence.
+
 Executor authentication and repository splitting are outside this change.
