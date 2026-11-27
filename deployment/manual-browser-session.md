@@ -49,10 +49,13 @@ browser has no DevTools port or automation connection.
   The file validates against <https://t3.codes/schema/t3.json> using the installed
   T3 Zod validator. Its fields also match the installed T3
   `0.1.14-nightly.20261127.5332` project schema. No real sibling `t3.json` examples
-  were found in the scoped local project searches. Actual T3 menu discovery and
-  clicking the imported action remain unverified: the registered project points
-  outside this authorized worktree, and its saved-script catalog is currently empty.
-  Only this worktree was edited; no replacement project or duplicate owner was made.
+  were found in the scoped local project searches. Josh has imported the script
+  and confirmed that **Sign in to LinkedIn** appears in the menu. Do not repeat
+  registration. Real invocation remains held until the app owner reports full
+  readiness, arranges profile exclusivity, and Josh is present. After this pin
+  update is merged, the project checkout must contain the reviewed launcher before
+  the imported relative command is run. No replacement project or duplicate owner
+  is needed.
 
 After those gates, acceptance is Josh selecting the action and manually completing
 sign-in/MFA and normal closure. Do not ask an agent to inspect the signed-in UI.
